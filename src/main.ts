@@ -154,7 +154,7 @@ export class Main {
         this.renderer.present();
     }
 
-    update(secondsElapsed: number, secondsElapsedDelta: number) {
+    async updateAsync(secondsElapsed: number, secondsElapsedDelta: number) : Promise<void> {
         let keyPressed = false;
         
         if (ImGui.isAnyMouseDown()) {
@@ -177,7 +177,7 @@ export class Main {
             }
         }
         
-        this.renderer.update(secondsElapsed, secondsElapsedDelta);
+        await this.renderer.updateAsync(secondsElapsed, secondsElapsedDelta);
     }
 
     resizeCanvas(width: number, height: number) {
@@ -238,7 +238,7 @@ export class Main {
         const secondsElapsedDelta = (presentTime - this.lastTime) / 1000;
         this.lastTime = presentTime;
 
-        this.update(secondsElapsed, secondsElapsedDelta);
+        await this.updateAsync(secondsElapsed, secondsElapsedDelta);
 
         gl.clearColor(0., 0., 0., 0.);
         gl.clear(gl.raw.COLOR_BUFFER_BIT | gl.raw.DEPTH_BUFFER_BIT);

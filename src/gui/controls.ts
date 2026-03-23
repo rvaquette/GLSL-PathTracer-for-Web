@@ -119,12 +119,12 @@ export class Controls {
                 simpleAcesFit.enable();
             }
         });
-/*
+
         // Denoiser
         let denoiser = gui.addFolder('Denoiser').close();
         denoiser.add(renderOptions, 'enableDenoiser').listen().name('Enable Denoiser');
-        denoiser.add(renderOptions, 'denoiserThreshold', 0.01, 0.5).listen().name('Threshold')
-*/
+        denoiser.add(renderOptions, 'denoiserFrameCnt', 5, 50).listen().name('Number of Frames to skip')
+
         // Camera
         let camera = gui.addFolder('Camera').close();  
         let fov = MathUtils.degrees(scene.camera.fov);

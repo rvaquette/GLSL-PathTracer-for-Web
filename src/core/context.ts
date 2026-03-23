@@ -23,7 +23,7 @@ export class Context {
         const rawGL = canvas.getContext('webgl2', opts) as WebGL2RenderingContext;
         if (!rawGL) throw new Error('WebGL2 not supported');
         this.gl = new GL(rawGL);
-
+        
         this.gl.getExtension('OES_texture_float_linear');
         this.gl.getExtension('EXT_color_buffer_float');
         this.gl.getExtension('OES_texture_half_float_linear');

@@ -1,4 +1,5 @@
 import { Vec2 } from "../math/vec2.js";
+import { Vec3 } from "../math/vec3.js";
 import { Context } from "./context.js";
 import { GL } from "./GL.js";
 import { Program } from "./program.js";
@@ -6,6 +7,7 @@ import { Quad } from "./quad.js";
 import { Scene } from "./scene.js";
 import { Shader } from "./shader.js";
 import { ShaderInclude, ShaderSource } from "./shaderIncludes.js";
+import { Denoiser } from "../external/denoiser/denoiser.js";
 
 export class Renderer {
     public static maxBufferTextureWidth = 4096;
@@ -34,18 +36,25 @@ export class Renderer {
     private pathTraceFBOLowRes: WebGLFramebuffer | null = null;
     private accumFBO: WebGLFramebuffer | null = null;
     private outputFBO: WebGLFramebuffer | null = null;
-    private denoiserFBO: WebGLFramebuffer | null = null;
 
     private pathTraceShader: Program | null = null;
     private pathTraceShaderLowRes: Program | null = null;
     private outputShader: Program | null = null;
     private tonemapShader: Program | null = null;
-    private denoiserShader: Program | null = null;
 
     private programs: Program[] = [];
 
     private quad: Quad;
     private pixelRatio: number;
+
+    backendReady: boolean = false;
+    denoiser: Denoiser | null = null;
+    denoiserExecutedOneTime: boolean = false;
+    denoised: boolean = false;
+    denoiserFBO: WebGLFramebuffer | null = null;
+    denoiserTexture: WebGLTexture | null = null;
+    denoiserInputFramePtr: Float32Array | null = null;
+    denoiserCanvas: HTMLCanvasElement | null = null;
 
     private _sampleCounter = 1;
     private currentBuffer = 0;
@@ -57,8 +66,6 @@ export class Renderer {
     private invNumTiles: Vec2 = new Vec2(0, 0);
     public numTiles: Vec2 = new Vec2(0, 0);
     public tile: Vec2 = new Vec2(0, 0);
-
-    private denoised = false;
 
     public get scene(): Scene {
         return this._scene;
@@ -89,7 +96,7 @@ export class Renderer {
         this.quad = new Quad();
         this.pixelRatio = scene.renderOptions.pixelRatio;
 
-        this.initFBOs();
+        await this.initFBOsAsync();
         await this.initShadersAsync();
     }
 
@@ -220,7 +227,7 @@ export class Renderer {
 
         [
             this.pathTraceTexture, this.pathTraceTextureLowRes, this.accumTexture,
-            this.tileOutputTexture[0], this.tileOutputTexture[1], this.BVHTex,
+            this.tileOutputTexture[0], this.tileOutputTexture[1], this.denoiserTexture, this.BVHTex,
             this.vertexIndicesTex, this.verticesTex, this.normalsTex, this.materialsTex,
             this.transformsTex, this.lightsTex, this.textureMapsArrayTex, this.envMapTex,
             this.envMapCDFTex
@@ -230,6 +237,7 @@ export class Renderer {
         this.pathTraceTextureLowRes = null;
         this.accumTexture = null;
         this.tileOutputTexture = [null, null];
+        this.denoiserTexture = null;
         this.BVHTex = null;
         this.vertexIndicesTex = null;
         this.verticesTex = null;
@@ -241,6 +249,11 @@ export class Renderer {
         this.envMapTex = null;
         this.envMapCDFTex = null;
 
+        if (this.denoiser) {
+            this.denoiser.dispose();
+            this.denoiser = null;
+        }
+
         [this.pathTraceFBO, this.pathTraceFBOLowRes, this.accumFBO, this.outputFBO, this.denoiserFBO]
             .forEach(f => f && gl.deleteFramebuffer(f));
 
@@ -248,16 +261,14 @@ export class Renderer {
         this.pathTraceFBOLowRes = null;
         this.accumFBO = null;
         this.outputFBO = null;
-        this.denoiserFBO = null;
 
-        [this.pathTraceShader, this.pathTraceShaderLowRes, this.outputShader, this.tonemapShader, this.denoiserShader]
+        [this.pathTraceShader, this.pathTraceShaderLowRes, this.outputShader, this.tonemapShader]
             .forEach(p => p && p.dispose());
 
         this.pathTraceShader = null;
         this.pathTraceShaderLowRes = null;
         this.outputShader = null;
         this.tonemapShader = null;
-        this.denoiserShader = null;
 
         this.programs.forEach(program => program.dispose());
         this.programs = [];
@@ -265,14 +276,14 @@ export class Renderer {
 
     public async resizeRendererAsync(): Promise<void> {
         this.dispose();
-        this.initFBOs();
+        await this.initFBOsAsync();
         await this.initShadersAsync();
     }
 
     public pauseOrContinue(_paused: boolean): void {
     }
 
-    private initFBOs(): void {
+    private async initFBOsAsync(): Promise<void> {
         const gl = this.gl;
 
         this.sampleCounter = 1;
@@ -325,8 +336,40 @@ export class Renderer {
         this.tileOutputTexture[1] = this.createTexture(gl.raw.RGBA32F, this.renderSize.x, this.renderSize.y, gl.raw.RGBA, gl.raw.FLOAT, null);
         gl.framebufferTexture2D(gl.raw.FRAMEBUFFER, gl.raw.COLOR_ATTACHMENT0, gl.raw.TEXTURE_2D, this.tileOutputTexture[this.currentBuffer], 0);
 
-        if (this.denoised) {
+        this.backendReady = !this.scene.renderOptions.enableDenoiser;
+
+        if (this.scene.renderOptions.enableDenoiser) {
+            this.denoiserInputFramePtr = new Float32Array(this.renderSize.x * this.renderSize.y * 4);
+
+            this.denoiserTexture = this.createTexture(gl.raw.RGBA32F, this.renderSize.x, this.renderSize.y, gl.raw.RGBA, gl.raw.FLOAT, null);
+        
             this.denoiserFBO = gl.createFramebuffer();
+
+            let denoiserCanvas = document.getElementById('_denoiserOutput');
+            if (denoiserCanvas === null) {
+                denoiserCanvas = document.createElement('canvas');
+                denoiserCanvas.id = '_denoiserOutput';
+                denoiserCanvas.style.display = 'none';
+                document.body.appendChild(denoiserCanvas);
+            }
+            this.denoiser = new Denoiser("webgl", denoiserCanvas);
+
+            await new Promise<void>((resolve) => {
+                this.denoiser.onBackendReady(() => {
+                    this.denoiser.useTiling = true;
+                    this.denoiser.onExecute((frameOutputPtr: Float32Array) => {
+                        gl.bindFramebuffer(gl.raw.FRAMEBUFFER, this.denoiserFBO);
+                        gl.bindTexture(gl.raw.TEXTURE_2D, this.denoiserTexture);
+                        gl.texSubImage2D(gl.raw.TEXTURE_2D, 0, 0, 0, this.denoiser.width, this.denoiser.height, gl.raw.RGBA, gl.raw.FLOAT, frameOutputPtr);
+                        gl.bindFramebuffer(gl.raw.FRAMEBUFFER, null);
+
+                        if (!this.denoiserExecutedOneTime) this.denoiserExecutedOneTime = true;
+                    }, "float32");
+
+                    this.backendReady = true;
+                    resolve();
+                });
+            });
         }
 
         gl.bindTexture(gl.raw.TEXTURE_2D, null);
@@ -334,14 +377,14 @@ export class Renderer {
     }
 
     public async reloadShadersAsync(): Promise<void> {
-        [this.pathTraceShader, this.pathTraceShaderLowRes, this.outputShader, this.tonemapShader, this.denoiserShader]
+        [this.pathTraceShader, this.pathTraceShaderLowRes, this.outputShader, this.tonemapShader]
             .forEach(p => p && p.dispose());
 
         this.pathTraceShader = null;
         this.pathTraceShaderLowRes = null;
         this.outputShader = null;
         this.tonemapShader = null;
-        this.denoiserShader = null;
+        this.denoiser = null;
 
         this.programs.forEach(program => program.dispose());
         this.programs = [];
@@ -369,15 +412,13 @@ export class Renderer {
             pathTraceShaderSrc,
             pathTraceShaderLowResSrc,
             outputShaderSrc,
-            tonemapShaderSrc,
-            denoiserShaderSrc
+            tonemapShaderSrc
         ] = await Promise.all([
             ShaderInclude.loadAsync(this.shadersDirectory + "common/vertex.glsl"),
             ShaderInclude.loadAsync(this.shadersDirectory + "tile.glsl"),
             ShaderInclude.loadAsync(this.shadersDirectory + "preview.glsl"),
             ShaderInclude.loadAsync(this.shadersDirectory + "output.glsl"),
-            ShaderInclude.loadAsync(this.shadersDirectory + "tonemap.glsl"),
-            ShaderInclude.loadAsync(this.shadersDirectory + "denoise.glsl")
+            ShaderInclude.loadAsync(this.shadersDirectory + "tonemap.glsl")
         ]);
 
         const [pathtraceDefines, tonemapDefines] = this.scene.getDefines();
@@ -398,7 +439,6 @@ export class Renderer {
 
         this.outputShader = this.loadShaders(vertexShaderSrc, outputShaderSrc);
         this.tonemapShader = this.loadShaders(vertexShaderSrc, tonemapShaderSrc);
-        this.denoiserShader = this.loadShaders(vertexShaderSrc, denoiserShaderSrc);
         this.pathTraceShader = this.loadShaders(vertexShaderSrc, pathTraceShaderSrc);
         this.pathTraceShaderLowRes = this.loadShaders(vertexShaderSrc, pathTraceShaderLowResSrc);
 
@@ -481,12 +521,6 @@ export class Renderer {
             gl.viewport(this.tileWidth * this.tile.x, this.tileHeight * this.tile.y, this.tileWidth, this.tileHeight);
             gl.bindTexture(gl.raw.TEXTURE_2D, this.pathTraceTexture);
             this.quad.draw(this.outputShader!);
-
-            gl.bindFramebuffer(gl.raw.FRAMEBUFFER, this.scene.renderOptions.enableDenoiser ? this.denoiserFBO : this.outputFBO);
-            gl.framebufferTexture2D(gl.raw.FRAMEBUFFER, gl.raw.COLOR_ATTACHMENT0, gl.raw.TEXTURE_2D, this.tileOutputTexture[this.currentBuffer], 0);
-            gl.viewport(0, 0, this.renderSize.x, this.renderSize.y);
-            gl.bindTexture(gl.raw.TEXTURE_2D, this.accumTexture);
-            this.quad.draw(this.tonemapShader!);
         }
 
         gl.bindFramebuffer(gl.raw.FRAMEBUFFER, null);
@@ -501,12 +535,11 @@ export class Renderer {
             gl.bindTexture(gl.raw.TEXTURE_2D, this.pathTraceTextureLowRes);
             this.quad.draw(this.tonemapShader!);
         } else {
-            gl.bindTexture(gl.raw.TEXTURE_2D, this.tileOutputTexture[1 - this.currentBuffer]);
-            if (this.scene.renderOptions.enableDenoiser) {
-                this.quad.draw(this.denoiserShader!);
-            } else {
-                this.quad.draw(this.outputShader!);
-            }
+            if (this.scene.renderOptions.enableDenoiser && this.denoiserExecutedOneTime)
+                gl.bindTexture(gl.raw.TEXTURE_2D, this.denoiserTexture);
+            else
+                gl.bindTexture(gl.raw.TEXTURE_2D, this.tileOutputTexture[1 - this.currentBuffer]);
+            this.quad.draw(this.outputShader!);
         }
     }
 
@@ -572,7 +605,7 @@ export class Renderer {
         Context.document.getElementById(filename)?.appendChild(canvas);
     }
 
-    public update(_secondsElapsed: number, _secondsElapsedDelta: number): void {
+    public async updateAsync(_secondsElapsed: number, _secondsElapsedDelta: number): Promise<void> {
         const gl = this.gl;
         const scene = this.scene;
 
@@ -623,6 +656,31 @@ export class Renderer {
             }
         }
 
+        if (scene.renderOptions.enableDenoiser && this.sampleCounter > 1)
+        {
+            if (!this.denoised || (this.frameCounter % (scene.renderOptions.denoiserFrameCnt * (this.numTiles.x * this.numTiles.y)) == 0))
+            {
+                gl.bindFramebuffer(gl.raw.FRAMEBUFFER, this.denoiserFBO);
+                gl.bindTexture(gl.raw.TEXTURE_2D, this.tileOutputTexture[1 - this.currentBuffer]);
+                gl.raw.readPixels(0, 0, this._renderSize.x, this._renderSize.y, gl.raw.RGBA, gl.raw.FLOAT, this.denoiserInputFramePtr);
+
+                // clamp values to [0, 1] range to avoid issues with the denoiser
+                for (let i = 0; i < this.denoiserInputFramePtr.length; i++) {
+                  this.denoiserInputFramePtr[i] = Math.min(Math.max(this.denoiserInputFramePtr[i], 0), 1);
+                }
+
+                this.denoised = true;
+
+                this.denoiser.width = this._renderSize.x;
+                this.denoiser.height = this._renderSize.y;
+
+                await this.denoiser.setInputData("color", this.denoiserInputFramePtr);
+                await this.denoiser.execute(); 
+            }
+        }
+        else
+            this.denoised = false;
+
         if (scene.dirty) {
             if (GL.profiling) {
                 ["bufferA", "bufferB", "bufferC", "bufferD", "image"].forEach(id => Context.document.getElementById(id)?.replaceChildren());
@@ -633,6 +691,12 @@ export class Renderer {
             this.sampleCounter = 1;
             this.denoised = false;
             this.frameCounter = 1;
+
+            if (scene.renderOptions.enableDenoiser) {
+                this.denoiser.abort();
+                this.denoiserExecutedOneTime = false;
+                this.denoised = false;
+            }
 
             if (this.accumFBO) {
                 gl.bindFramebuffer(gl.raw.FRAMEBUFFER, this.accumFBO);

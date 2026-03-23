@@ -13,6 +13,7 @@ export class RenderOptions {
     RRDepth: number;
     texArrayWidth: number;
     texArrayHeight: number;
+    denoiserFrameCnt: number;
     enableRR: boolean;
     enableDenoiser: boolean;
     enableTonemap: boolean;
