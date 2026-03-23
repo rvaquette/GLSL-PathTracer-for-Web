@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>GLSL-Pathtracer-JS</title>
+    <style>body {
+      margin: 0;
+      background: #23272e;
+      font-family: 'Segoe UI', 'Arial', sans-serif;
+      color: #e0e0e0;
+    }
+    
+    .playerCanvas {
+      width: 640px;
+      height: 360px;
+      border: none;
+      outline: none;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+      border-radius: 6px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.45);
+      background: #181b20;
+    }
+    
+    input[type="text"] {
+      background: #2c313c;
+      color: #f8f8f2;
+      padding: 8px 12px;
+      border: 1.5px solid #3fa1ff;
+      border-radius: 5px;
+      outline: none;
+      transition: border-color 0.2s;
+      font-size: 15px;
+    }
+    
+    input[type="text"]:focus {
+      border-color: #6df1ff;
+    }
+    
+    button {
+      background: linear-gradient(90deg, #3fa1ff 0%, #6df1ff 90%);
+      color: #181b20;
+      border: none;
+      border-radius: 5px;
+      padding: 7px 16px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 2px;
+      box-shadow: 0 1px 6px rgba(60,180,255,0.15);
+      transition: background 0.2s, color 0.2s;
+    }
+    
+    button:hover, button:focus {
+      background: #6df1ff;
+      color: #002d50;
+    }
+    
+    .shader-tabs {
+      display: flex;
+      gap: 3px;
+      background: #23272e;
+      padding: 8px 8px 0 8px;
+      border-bottom: 2px solid #314455;
+      border-radius: 10px 10px 0 0;
+    }
+    
+    .shader-tab {
+      padding: 7px 18px;
+      background: #16191e;
+      color: #6a8bad;
+      border: none;
+      cursor: pointer;
+      font-family: monospace, 'Courier New';
+      font-size: 14px;
+      border-radius: 8px 8px 0 0;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      transition: background 0.15s, color 0.15s;
+    }
+    
+    .shader-tab:hover {
+      background: #274472;
+      color: #d3e3fa;
+    }
+    
+    .shader-tab.active {
+      background: linear-gradient(90deg, #314566, #23272e);
+      color: #3fa1ff;
+      font-weight: 600;
+      border-bottom: 2px solid #3fa1ff;
+    }
+    
+    .editor-container {
+      border: 1px solid #314455;
+      border-radius: 0 0 10px 10px;
+      background: #181b20;
+      padding: 0;
+      margin-top: -2px;
+      box-shadow: 0 1px 7px rgba(30,58,138,0.07);
+    }
+    
+    .CodeMirror {
+      font-family: "Fira Mono", "Menlo", "Monaco", "monospace";
+      font-size: 14px;
+      height: 650px;
+      width: 850px;
+      border-radius: 4px;
+      border: none;
+      background: #16191e !important;
+    }
+    
+    .buffer-display {
+      display: inline-block;
+      overflow-x: auto;
+      white-space: nowrap;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #1c2230;
+    }
+    
+    #log, #info {
+      background: #10141a;
+      color: #6df1ff;
+      border-radius: 4px;
+      padding: 10px 15px;
+      margin: 8px 0;
+      font-family: 'Fira Mono', monospace;
+      font-size: 14px;
+    }
+    
+    label {
+      margin-left: 7px;
+      font-size: 15px;
+      color: #8db2e5;
+    }
+    
+    #inputs-display {
+      background: #16191e;
+      color: #88b3f0;
+      padding: 11px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-top: 8px;
+      border: 1px solid #274472;
+    }
+    
+    img {
+      filter: drop-shadow(0 1px 3px #31445588);
+    }
+    </style>
+    <script>
+      (function(){
+          var oldLog = console.log;
+          console.log = function (...data) {
+              var message = data.map(d => {
+                  if (typeof d === 'object') {
+                      try {
+                          return JSON.stringify(d, null, 2);
+                      } catch (e) {
+                          return String(d);
+                      }
+                  }
+                  return String(d);
+              }).join(' ');
+              const logger = document.getElementById('log');
+              if (logger) logger.innerHTML = message;
+              
+              oldLog.apply(console, arguments);
+          };
+      })();
+
+      (function(){
+          var oldLog = console.info;
+          console.info = function (...data) {
+              var message = data.map(d => {
+                  if (typeof d === 'object') {
+                      try {
+                          return JSON.stringify(d, null, 2);
+                      } catch (e) {
+                          return String(d);
+                      }
+                  }
+                  return String(d);
+              }).join(' ');
+              const logger = document.getElementById('info');
+              if (logger) logger.innerHTML = message;
+          };
+      })();
+
+      (function(){
+          var oldClear = console.clear;
+          console.clear = function (...data) {
+              const logger = document.getElementById('info');
+              if (logger) logger.innerHTML = '';
+          };
+      })();
+
+      function getSceneName() {
+        let scene = document.getElementById('sceneInput').value;
+
+        if (scene == '') {
+          if (window.location.search != '') {
+            // get scene parameter from query
+            const urlParams = new URLSearchParams(window.location.search);
+            scene = urlParams.get('scene');
+          }
+        }
+        if (scene == '') {
+          scene = window.sceneName ?? '';
+        }
+
+        return scene;
+      }
+
+      async function watchInit() {
+        const canvas = document.getElementById('canvas');
+
+        const scene = getSceneName();
+
+        // change Url
+        const newUrl = `?scene=${scene}`;
+        history.pushState(null, '', newUrl);
+
+        const config = {
+          document: document,
+          canvas: canvas,
+          scene: scene
+        };
+
+        await window.loadSceneAsync(config);
+      }
+    </script>
+  </head>
+  <body onload="watchInit()">
+    <br/>
+    <span style="text-align: center; display: block;">
+      <input type="text" id="sceneInput" placeholder="Enter scene name" />
+      <button onclick="watchInit()">Load Scene</button>
+    </span>
+    <table>
+      <tr>
+        <td>
+          <canvas id="canvas" style="margin-top: 50px;" class="playerCanvas">
+          </canvas>
+          <span style="display: block; text-align: center; ">
+            <span style="float: left;">
+              <button onclick="rewind()"><img src="img/themes/dark/rewind.png"></button>
+              <button onclick="let stopped = pauseOrContinue();document.getElementById('playPauseButton').src = !stopped ? 'img/themes/dark/pause.png' : 'img/themes/dark/play.png';"><img id="playPauseButton" src="img/themes/dark/pause.png" /></button>
+            </span>
+            <div style="float: right;">
+              <button onclick="fullScreen()"><img src="img/themes/dark/fullscreen.png"></button>
+            </div>
+          </span>
+        </td>
+      </tr>
+      </table>
+    <table>
+      <tr>
+        <td>
+          <pre id="log" style="text-align: left;"></pre>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <input type="checkbox" id="profilingCheckbox" onchange="window.setProfiling(this.checked);document.getElementById('debug').style.visibility = this.checked ? 'visible' : 'hidden';" />
+          <label for="profilingCheckbox">Enable Debug</label>
+        </td>
+      </tr>
+    </table>
+    <span style="visibility: hidden;" id="debug">
+      <pre id="info" style="text-align: left;"></pre>
+      <span style="background-color: blueviolet;">
+        <span id="textures"></span>
+      </span>
+      <span>
+        BufferA<br/>
+        <span id="bufferA" class="buffer-display"></span>
+      </span>
+      <span>
+        BufferB<br/>
+        <span id="bufferB" class="buffer-display"></span>
+      </span>
+      <span>
+        BufferC<br/>
+        <span id="bufferC" class="buffer-display"></span>
+      </span>
+      <span>
+        BufferD<br/>
+        <span id="bufferD" class="buffer-display"></span>
+      </span>
+      <span>
+        Image<br/>
+        <span id="image" class="buffer-display"></span>
+      </span>
+    <table>
+      <tr>
+        <td>
+          <!-- Shader Editor with Tabs -->
+          <div class="shader-tabs">
+            <button id="tab-common" class="shader-tab active" onclick="switchTab('common')">Common</button>
+            <button id="tab-bufferA" class="shader-tab" onclick="switchTab('bufferA')">Buffer A</button>
+            <button id="tab-bufferB" class="shader-tab" onclick="switchTab('bufferB')">Buffer B</button>
+            <button id="tab-bufferC" class="shader-tab" onclick="switchTab('bufferC')">Buffer C</button>
+            <button id="tab-bufferD" class="shader-tab" onclick="switchTab('bufferD')">Buffer D</button>
+            <button id="tab-sound" class="shader-tab" onclick="switchTab('sound')">Sound</button>
+            <button id="tab-cubeA" class="shader-tab" onclick="switchTab('cubeA')">Cube A</button>
+            <button id="tab-image" class="shader-tab" onclick="switchTab('image')">Image</button>
+          </div>
+          <div class="editor-container">
+            <textarea id="code" name="code"></textarea>
+          </div>
+        </td>
+        <td style="vertical-align: top;">
+          <div id="inputs-display" style="padding: 4px; background-color: #272822; color: #f8f8f2; font-family: monospace; font-size: 12px; vertical-align: top;"></div>
+        </td>
+      </tr>
+    </table>
+
+<!-- CodeMirror 5 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/clike/clike.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js"></script>
+
+<script>
+  /*
+    // Saving a blob is as simple as the fetch example, you just get the
+    // readableStream from the blob by calling blob.stream() to get a
+    // readableStream and then pipe it
+    $export.onclick = async () => {
+      const scene = getSceneName();
+
+      // Save to local file
+      const canvas = document.getElementById('canvas');
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const suggestedName = `${scene}-${Date.now()}.png`;
+
+      const fileStream = streamSaver.createWriteStream(suggestedName, {
+          size: blob.size // Makes the percentage visiable in the download
+      });
+
+      // One quick alternetive way if you don't want the hole blob.js thing:
+      // const readableStream = new Response(
+      //   Blob || String || ArrayBuffer || ArrayBufferView
+      // ).body
+      const readableStream = blob.stream()
+
+      // more optimized pipe version
+      // (Safari may have pipeTo but it's useless without the WritableStream)
+      if (window.WritableStream && readableStream.pipeTo) {
+        return readableStream.pipeTo(fileStream)
+          .then(() => {
+            console.log('done writing 1');
+        })
+      }
+
+      // Write (pipe) manually
+      window.writer = fileStream.getWriter()
+
+      const reader = readableStream.getReader()
+      const pump = () => reader.read()
+        .then(res => res.done
+          ? writer.close()
+          : writer.write(res.value).then(pump))
+
+      pump()
+    }*/
+</script>
+
+    <script type="module">
+      import { Main } from './dist/main.js';
+      import { GL } from './dist/core/GL.js';
+
+      window.loadSceneAsync = async function(config) {
+        await Main.instance.runAsync(config);
+      }
+      window.pauseOrContinue = function() {
+        return Main.instance.pauseOrContinue();
+      }
+      window.rewind = async function() {
+        Main.instance.rewind();
+        document.getElementById('playPauseButton').src = 'img/themes/dark/play.png';
+      }
+      window.fullScreen = async function() {
+        const canvas = document.getElementById('canvas');
+        if (canvas.requestFullscreen) {
+          await canvas.requestFullscreen();
+        } else if (canvas.mozRequestFullScreen) {
+          await canvas.mozRequestFullScreen();
+        } else if (canvas.webkitRequestFullscreen) {
+          await canvas.webkitRequestFullscreen();
+        } else if (canvas.msRequestFullscreen) {
+          await canvas.msRequestFullscreen();
+        }
+        canvas.focus();
+      }
+      window.setProfiling = function(enabled) {
+        GL.profiling = enabled;
+      }
+      window.showInputs = function(tabName) {
+        const inputsContainer = document.getElementById('inputs-display');
+        inputsContainer.innerHTML = "";
+      } 
+      window.setSceneName = function(name) {
+        window.sceneName = name;
+        document.getElementById('playPauseButton').src = 'img/themes/dark/pause.png';
+      }
+    </script>
+    <script>
+      // Initialize CodeMirror
+      var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
+        mode: "clike",
+        theme: "monokai",
+        lineNumbers: true,
+        indentUnit: 4,
+        tabSize: 4
+      });
+
+      let currentTab = "image";
+      let shaderTabs = {
+        common: "// Common Shader Code\n",
+        bufferA: "// Buffer A Shader Code\n",
+        bufferB: "// Buffer B Shader Code\n",
+        bufferC: "// Buffer C Shader Code\n",
+        bufferD: "// Buffer D Shader Code\n",
+        sound: "// Sound Shader Code\n",
+        cubeA: "// Cube A Shader Code\n",
+        image: "// Image Shader Code\n"
+      };
+
+      // Function to switch tabs
+      window.switchTab = function(tabName) {
+        // Save current tab's content
+        shaderTabs[currentTab] = editor.getValue();
+        
+        // Switch to new tab
+        currentTab = tabName;
+        editor.setValue(shaderTabs[currentTab]);
+        
+        // Update tab button styles
+        document.querySelectorAll('.shader-tab').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        
+        window.showInputs(tabName);
+        
+        // Refresh editor
+        editor.refresh();
+      };
+
+      // Function to get all shader code
+      window.getAllShaders = function() {
+        // Save current tab first
+        shaderTabs[currentTab] = editor.getValue();
+        return shaderTabs;
+      };
+
+      // Function to set shader code for a specific tab
+      window.setShaderCode = function(tabName, code) {
+        shaderTabs[tabName] = code;
+        if (currentTab === tabName) {
+          editor.setValue(code);
+        }
+      };
+
+      // Function to load all shaders at once
+      window.loadAllShaders = function(shadersObject) {
+        Object.assign(shaderTabs, shadersObject);
+        editor.setValue(shaderTabs[currentTab]);
+
+        // Hide tabs that are not present
+        for (let tab in shaderTabs) {
+          const tabButton = document.getElementById(`tab-${tab}`);
+          if (shadersObject[tab] === undefined) {
+            tabButton.style.display = 'none';
+          } else {
+            tabButton.style.display = 'inline-block';
+          }
+        }
+      };
+    </script>
+
+  </body>
+</html>
