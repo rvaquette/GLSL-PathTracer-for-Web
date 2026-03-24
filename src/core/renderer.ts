@@ -88,10 +88,6 @@ export class Renderer {
         this._scene = scene;
         this.shadersDirectory = "./shaders/";
 
-        if (!scene.initialized) {
-            await scene.processSceneAsync();
-        }
-
         this.initGPUDataBuffers();
         this.quad = new Quad();
         this.pixelRatio = scene.renderOptions.pixelRatio;
@@ -177,18 +173,18 @@ export class Renderer {
 
         gl.pixelStorei(gl.raw.PACK_ALIGNMENT, 1);
 
-        this.BVHTex = this.createBufferTexture(this.scene.bvhData(), 3);
-        this.vertexIndicesTex = this.createBufferTextureInt(this.scene.vertIndicesData(), 3);
-        this.verticesTex = this.createBufferTexture(this.scene.verticesData(), 4);
-        this.normalsTex = this.createBufferTexture(this.scene.normalsData(), 4);
-        this.materialsTex = this.createBufferTexture(this.scene.materialsData(), 4);
-        this.transformsTex = this.createBufferTexture(this.scene.transformsData(), 4);
+        this.BVHTex = this.createBufferTexture(this.scene.bvhDataArray, 3);
+        this.vertexIndicesTex = this.createBufferTextureInt(this.scene.vertIndicesDataArray, 3);
+        this.verticesTex = this.createBufferTexture(this.scene.verticesDataArray, 4);
+        this.normalsTex = this.createBufferTexture(this.scene.normalsDataArray, 4);
+        this.materialsTex = this.createBufferTexture(this.scene.materialsDataArray, 4);
+        this.transformsTex = this.createBufferTexture(this.scene.transformsDataArray, 4);
 
-        if (this.scene.lights.length > 0) {
-            this.lightsTex = this.createBufferTexture(this.scene.lightsData(), 3);
+        if (this.scene.lightsDataArray && this.scene.lightsDataArray.length > 0) {
+            this.lightsTex = this.createBufferTexture(this.scene.lightsDataArray, 3);
         }
 
-        if (this.scene.textures.length > 0) {
+        if (this.scene.textureMapsArray && this.scene.textureMapsArray.length > 0) {
             this.textureMapsArrayTex = this.createBufferTextureUint(this.scene.textureMapsArray, 4);
         }
 
@@ -452,10 +448,10 @@ export class Renderer {
             gl.uniform1f(gl.raw.getUniformLocation(shaderObject, "envMapTotalSum"), scene.envMap.totalSum);
         }
 
-        gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "topBVHIndex"), scene.bvhTranslator.topLevelIndex);
+        gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "topBVHIndex"), scene.topLevelIndex);
         gl.uniform2f(gl.raw.getUniformLocation(shaderObject, "resolution"), this.renderSize.x, this.renderSize.y);
         gl.uniform2f(gl.raw.getUniformLocation(shaderObject, "invNumTiles"), this.invNumTiles.x, this.invNumTiles.y);
-        gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "numOfLights"), scene.lights.length);
+        gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "numOfLights"), scene.numOfLights);
         gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "accumTexture"), 0);
         gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "BVH"), 1);
         gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "vertexIndicesTex"), 2);
@@ -477,9 +473,9 @@ export class Renderer {
             gl.uniform1f(gl.raw.getUniformLocation(shaderObject, "envMapTotalSum"), scene.envMap.totalSum);
         }
 
-        gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "topBVHIndex"), scene.bvhTranslator.topLevelIndex);
+        gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "topBVHIndex"), scene.topLevelIndex);
         gl.uniform2f(gl.raw.getUniformLocation(shaderObject, "resolution"), this.renderSize.x, this.renderSize.y);
-        gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "numOfLights"), scene.lights.length);
+        gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "numOfLights"), scene.numOfLights);
         gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "accumTexture"), 0);
         gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "BVH"), 1);
         gl.uniform1i(gl.raw.getUniformLocation(shaderObject, "vertexIndicesTex"), 2);
@@ -508,7 +504,6 @@ export class Renderer {
             gl.viewport(0, 0, Math.floor(this.windowSize.x * this.pixelRatio), Math.floor(this.windowSize.y * this.pixelRatio));
             this.quad.draw(this.pathTraceShaderLowRes!);
 
-            this.scene.instancesModified = false;
             this.scene.dirty = false;
             this.scene.envMapModified = false;
         } else {
@@ -611,24 +606,6 @@ export class Renderer {
 
         if (!scene.dirty && scene.renderOptions.maxSpp !== -1 && this.sampleCounter >= scene.renderOptions.maxSpp) {
             return;
-        }
-
-        if (scene.instancesModified) {
-            const transformsData = this.scene.transformsData();
-            gl.bindTexture(gl.raw.TEXTURE_2D, this.transformsTex);
-            gl.texImage2D(gl.raw.TEXTURE_2D, 0, gl.raw.RGBA32F, this.scene.transforms.length * 4, 1, 0, gl.raw.RGBA, gl.raw.FLOAT, transformsData);
-
-            const matData = this.scene.materialsData();
-            gl.bindTexture(gl.raw.TEXTURE_2D, this.materialsTex);
-            gl.texImage2D(gl.raw.TEXTURE_2D, 0, gl.raw.RGBA32F, this.scene.materials.length * 8, 1, 0, gl.raw.RGBA, gl.raw.FLOAT, matData);
-
-            const index = scene.bvhTranslator.topLevelIndex;
-            const nodeSize = 36;
-            const offset = index * nodeSize;
-            const size = (scene.bvhTranslator.nodes.length - index) * nodeSize;
-            const bvhData = this.scene.bvhData(index);
-            gl.bindTexture(gl.raw.TEXTURE_2D, this.BVHTex);
-            gl.texSubImage2D(gl.raw.TEXTURE_2D, 0, offset, 0, size, 1, gl.raw.RGBA, gl.raw.FLOAT, bvhData);
         }
 
         if (scene.envMapModified && scene.envMap) {

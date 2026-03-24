@@ -3,13 +3,11 @@ import { Renderer } from "./core/renderer.js";
 import { RenderOptions } from "./core/renderOptions.js";
 import { Scene } from "./core/scene.js";
 import { ImGui } from "./gui/imGui.js";
-import { loadGLTFAsync } from "./loaders/gltf/loadGLTF.js";
-import { loadSceneFromFileAsync } from "./loaders/scene/sceneLoader.js";
-import { Mat4 } from "./math/mat4.js";
 import { GLBench } from "./external/gl-bench/index.js";
 import { Controls } from "./gui/controls.js";
 import { loadFile } from "./utilities/fsLoader.js";
 import { GL } from "./core/GL.js";
+import { loadSceneFromJsonAsync, SceneFileConfig } from "./loaders/scene/sceneLoader.js";
 
 export class Main {
     static _instance : Main | null = null;
@@ -24,6 +22,7 @@ export class Main {
     }
 
     public scenes: string[] = [];
+    public sceneConfigs: SceneFileConfig[] = [];
     public envMaps: string[] = [];
     public envMapIdx: number = 0;
 
@@ -36,7 +35,6 @@ export class Main {
     private bench: GLBench | null = null;
     
     optionsChanged: boolean = false;
-    objectPropChanged: boolean = false;
     reloadShaders: boolean = false;
 
     private constructor() {
@@ -59,10 +57,21 @@ export class Main {
     
     private async getSceneFilesAsync() : Promise<void> {
         try {
-            let response = await loadFile("/scenes.json");
-            this.scenes = await response.json();
+            const response = await loadFile("/scenes.json");
+            const data = await response.json();
+
+            if (!Array.isArray(data)) {
+                this.sceneConfigs = [];
+                this.scenes = [];
+                return;
+            }
+
+            this.sceneConfigs = data as SceneFileConfig[];
+            this.scenes = this.sceneConfigs.map((entry) => entry.scene);
         } catch (err) {
             console.error("Error fetching scene files:", err);
+            this.sceneConfigs = [];
+            this.scenes = [];
         }
     }
 
@@ -92,7 +101,7 @@ export class Main {
         this.renderOptions.flipTexturesY = flipTexturesY;
         this.renderOptions.useRayMarching = useRayMarching;
 
-        let success = false;
+        let success = await loadSceneFromJsonAsync(sceneName, this.scene, this.renderOptions);
 
         if (!success) {
             console.error("Unable to load scene");
@@ -100,7 +109,7 @@ export class Main {
             return false;
         }
 
-        if (this.scene.envMap === null && this.envMaps.length > 0 && this.scene.lights.length === 0) {
+        if (this.scene.envMap === null && this.envMaps.length > 0 && this.scene.numOfLights === 0) {
             await this.scene.addEnvMapAsync(`HDR/${this.envMaps[this.envMapIdx]}`);
             this.renderOptions.enableEnvMap = true;
             this.renderOptions.envMapIntensity = 1.5;
@@ -194,11 +203,6 @@ export class Main {
             this.optionsChanged = false;
             this.scene.dirty = true;
             this.firstTime = now;
-        }
-
-        if (this.objectPropChanged) {
-            this.objectPropChanged = false;
-            this.scene.rebuildInstances();
         }
 
         if (this.reloadShaders)
