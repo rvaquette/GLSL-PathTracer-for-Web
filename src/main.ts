@@ -59,7 +59,7 @@ export class Main {
     
     private async getSceneFilesAsync() : Promise<void> {
         try {
-            let response = await loadFile("/pathtracer.json");
+            let response = await loadFile("/scenes.json");
             this.scenes = await response.json();
         } catch (err) {
             console.error("Error fetching scene files:", err);
@@ -82,8 +82,6 @@ export class Main {
             this.scene = null;
         }
 
-        let sceneFileName = sceneName;
-
         if (typeof window !== "undefined") {
             if (typeof (window as any).setSceneName === 'function') {
                 (window as any).setSceneName(sceneName);
@@ -94,24 +92,7 @@ export class Main {
         this.renderOptions.flipTexturesY = flipTexturesY;
         this.renderOptions.useRayMarching = useRayMarching;
 
-        // get file extension
-        const ext = Main.getExt(sceneName);
-
         let success = false;
-        let xform = new Mat4();
-
-        if ((ext === "scene" || ext === "gltf" || ext === "glb") && !sceneFileName.startsWith('/scenes/pathtracer/')) {
-            sceneFileName = `/scenes/pathtracer/${sceneFileName}`;
-        }
-
-        // Replace with actual loading logic
-        if (ext === "scene") {
-            success = await loadSceneFromFileAsync(sceneFileName, this.scene, this.renderOptions);
-        } else if (ext === "gltf") {
-            success = await loadGLTFAsync(sceneFileName, this.scene, this.renderOptions, xform, false);
-        } else if (ext === "glb") {
-            success = await loadGLTFAsync(sceneFileName, this.scene, this.renderOptions, xform, true);
-        } 
 
         if (!success) {
             console.error("Unable to load scene");
@@ -119,7 +100,7 @@ export class Main {
             return false;
         }
 
-        if (ext !== "" && this.scene.envMap === null && this.envMaps.length > 0 && this.scene.lights.length === 0) {
+        if (this.scene.envMap === null && this.envMaps.length > 0 && this.scene.lights.length === 0) {
             await this.scene.addEnvMapAsync(`HDR/${this.envMaps[this.envMapIdx]}`);
             this.renderOptions.enableEnvMap = true;
             this.renderOptions.envMapIntensity = 1.5;
