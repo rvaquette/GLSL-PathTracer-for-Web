@@ -11,7 +11,6 @@ import { Main } from "../../main.js";
 import { loadFile } from "../../utilities/fsLoader.js";
 import { Camera } from "../../core/camera.js";
 import { AzureBlobUtil } from "../../utilities/blob.js";
-import { blob } from "stream/consumers";
 
 interface SceneCameraConfig {
     eye: [number, number, number];
@@ -81,6 +80,34 @@ function getInt3Array(buffer: Float32Array, offset1: number, offset2: number): I
         tmp2.push(new Vec3(tmp1[i], tmp1[i + 1], tmp1[i + 2]));
     }
     return new Int32Array(tmp2.flatMap(vec => [vec.x, vec.y, vec.z])); 
+}
+
+export function getImageDataCore(image: HTMLImageElement | ImageBitmap, width: number, height: number, flip: boolean = false): ImageData {
+    const canvas = Context.document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        return null;
+    }
+    if (flip) {
+        // Flip the image vertically
+        ctx.scale(1, -1);
+        ctx.drawImage(image, 0, -height, width, height);
+    } else {
+        ctx.drawImage(image, 0, 0, width, height);
+    }   
+    const imageData = ctx.getImageData(0, 0, width, height);
+
+    return imageData;
+}
+
+export function getImageData(image: HTMLImageElement | ImageBitmap, width: number, height: number, flip: boolean = false): Uint8Array | null {
+    const imageData = getImageDataCore(image, width, height, flip);
+    if (!imageData) {
+        return null;
+    }
+    return new Uint8Array(imageData.data.buffer);
 }
 
 /**
@@ -163,8 +190,19 @@ export async function loadSceneFromJsonAsync(
 
     // Textures
     if (sceneConfig.withTexture) {
-        let texturesBlob = await AzureBlobUtil.readBlob(`${scene.sceneName}/textures.png`);
-        scene.textureMapsArray = new Uint8Array(await texturesBlob?.arrayBuffer());
+        let image = await new Promise<HTMLImageElement | false>((resolve, reject) => {
+            const image = new Image();
+            image.crossOrigin = 'anonymous';
+            image.onload = () => {
+                resolve(image);
+            };
+            image.onerror = () => resolve(false);
+            image.src = AzureBlobUtil.buildUrl(`${scene.sceneName}/textures.png`);
+        });
+
+        if (image) {
+            scene.textureMapsArray = getImageData(image, image.width, image.height);
+        }
     }
 
     scene.renderOptions = renderOptions;

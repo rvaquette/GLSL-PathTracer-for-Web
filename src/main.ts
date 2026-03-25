@@ -272,18 +272,6 @@ export class Main {
         this.pauseOrContinue();
     }
 
-    rewind() {
-        this.pauseOrContinue(true);
-        this.scene.dirty = true;
-        this.firstTime = performance.now();
-        requestAnimationFrame((now) => {
-            this.mainLoopAsync(now);
-            requestAnimationFrame((now) => {
-                this.mainLoopAsync(now);
-            });
-        });
-    }
-
     pauseOrContinue(forceStopped: boolean = false): boolean {
         this.stopped = !this.stopped || forceStopped;
 

@@ -334,39 +334,37 @@ export class Renderer {
 
         this.backendReady = !this.scene.renderOptions.enableDenoiser;
 
-        if (this.scene.renderOptions.enableDenoiser) {
-            this.denoiserInputFramePtr = new Float32Array(this.renderSize.x * this.renderSize.y * 4);
+        this.denoiserInputFramePtr = new Float32Array(this.renderSize.x * this.renderSize.y * 4);
 
-            this.denoiserTexture = this.createTexture(gl.raw.RGBA32F, this.renderSize.x, this.renderSize.y, gl.raw.RGBA, gl.raw.FLOAT, null);
-        
-            this.denoiserFBO = gl.createFramebuffer();
+        this.denoiserTexture = this.createTexture(gl.raw.RGBA32F, this.renderSize.x, this.renderSize.y, gl.raw.RGBA, gl.raw.FLOAT, null);
+    
+        this.denoiserFBO = gl.createFramebuffer();
 
-            let denoiserCanvas = document.getElementById('_denoiserOutput');
-            if (denoiserCanvas === null) {
-                denoiserCanvas = document.createElement('canvas');
-                denoiserCanvas.id = '_denoiserOutput';
-                denoiserCanvas.style.display = 'none';
-                document.body.appendChild(denoiserCanvas);
-            }
-            this.denoiser = new Denoiser("webgl", denoiserCanvas);
-
-            await new Promise<void>((resolve) => {
-                this.denoiser.onBackendReady(() => {
-                    this.denoiser.useTiling = true;
-                    this.denoiser.onExecute((frameOutputPtr: Float32Array) => {
-                        gl.bindFramebuffer(gl.raw.FRAMEBUFFER, this.denoiserFBO);
-                        gl.bindTexture(gl.raw.TEXTURE_2D, this.denoiserTexture);
-                        gl.texSubImage2D(gl.raw.TEXTURE_2D, 0, 0, 0, this.denoiser.width, this.denoiser.height, gl.raw.RGBA, gl.raw.FLOAT, frameOutputPtr);
-                        gl.bindFramebuffer(gl.raw.FRAMEBUFFER, null);
-
-                        if (!this.denoiserExecutedOneTime) this.denoiserExecutedOneTime = true;
-                    }, "float32");
-
-                    this.backendReady = true;
-                    resolve();
-                });
-            });
+        let denoiserCanvas = document.getElementById('_denoiserOutput');
+        if (denoiserCanvas === null) {
+            denoiserCanvas = document.createElement('canvas');
+            denoiserCanvas.id = '_denoiserOutput';
+            denoiserCanvas.style.display = 'none';
+            document.body.appendChild(denoiserCanvas);
         }
+        this.denoiser = new Denoiser("webgl", denoiserCanvas);
+
+        await new Promise<void>((resolve) => {
+            this.denoiser.onBackendReady(() => {
+                this.denoiser.useTiling = true;
+                this.denoiser.onExecute((frameOutputPtr: Float32Array) => {
+                    gl.bindFramebuffer(gl.raw.FRAMEBUFFER, this.denoiserFBO);
+                    gl.bindTexture(gl.raw.TEXTURE_2D, this.denoiserTexture);
+                    gl.texSubImage2D(gl.raw.TEXTURE_2D, 0, 0, 0, this.denoiser.width, this.denoiser.height, gl.raw.RGBA, gl.raw.FLOAT, frameOutputPtr);
+                    gl.bindFramebuffer(gl.raw.FRAMEBUFFER, null);
+
+                    if (!this.denoiserExecutedOneTime) this.denoiserExecutedOneTime = true;
+                }, "float32");
+
+                this.backendReady = true;
+                resolve();
+            });
+        });
 
         gl.bindTexture(gl.raw.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.raw.FRAMEBUFFER, null);
@@ -648,7 +646,7 @@ export class Renderer {
                 }
 
                 gl.bindFramebuffer(gl.raw.FRAMEBUFFER, this.denoiserFBO);
-                gl.bindTexture(gl.raw.TEXTURE_2D, this.tileOutputTexture[1 - this.currentBuffer]);
+                gl.framebufferTexture2D(gl.raw.FRAMEBUFFER, gl.raw.COLOR_ATTACHMENT0, gl.raw.TEXTURE_2D, this.tileOutputTexture[1 - this.currentBuffer], 0);
                 gl.raw.readPixels(0, 0, this._renderSize.x, this._renderSize.y, gl.raw.RGBA, gl.raw.FLOAT, this.denoiserInputFramePtr);
 
                 // clamp values to [0, 1] range to avoid issues with the denoiser
