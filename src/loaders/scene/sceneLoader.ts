@@ -68,7 +68,7 @@ function getFloat4Array(buffer: Float32Array, offset1: number, offset2?: number)
 function getFloat3Array(buffer: Float32Array, offset1: number, offset2: number): Float32Array {
     let tmp1 = buffer.subarray(offset1 * 4, offset2 * 4);
     let tmp2 = [];
-    for (let i = 0; i < tmp1.length; i += 3) {
+    for (let i = 0; i < tmp1.length; i += 4) {
         tmp2.push(new Vec3(tmp1[i], tmp1[i + 1], tmp1[i + 2]));
     }
     return new Float32Array(tmp2.flatMap(vec => [vec.x, vec.y, vec.z])); 
@@ -77,7 +77,7 @@ function getFloat3Array(buffer: Float32Array, offset1: number, offset2: number):
 function getInt3Array(buffer: Float32Array, offset1: number, offset2: number): Int32Array {
     let tmp1 = buffer.subarray(offset1 * 4, offset2 * 4);
     let tmp2 = [];
-    for (let i = 0; i < tmp1.length; i += 3) {
+    for (let i = 0; i < tmp1.length; i += 4) {
         tmp2.push(new Vec3(tmp1[i], tmp1[i + 1], tmp1[i + 2]));
     }
     return new Int32Array(tmp2.flatMap(vec => [vec.x, vec.y, vec.z])); 
@@ -157,7 +157,7 @@ export async function loadSceneFromJsonAsync(
     scene.bvhDataArray = getFloat4Array(buffer, sceneConfig.indices.BVH, sceneConfig.indices.vertexIndicesTex);
     scene.vertIndicesDataArray = getInt3Array(buffer, sceneConfig.indices.vertexIndicesTex, sceneConfig.indices.verticesTex);
     scene.verticesDataArray = getFloat4Array(buffer, sceneConfig.indices.verticesTex, sceneConfig.indices.normalsTex);
-    scene.normalsDataArray = getFloat4Array(buffer, sceneConfig.indices.normalsTex);
+    scene.normalsDataArray = getFloat4Array(buffer, sceneConfig.indices.normalsTex, 2 * sceneConfig.indices.normalsTex - sceneConfig.indices.verticesTex); // normals are stored as float4, but w component is unused
 
     // Textures
     if (sceneConfig.withTexture) {

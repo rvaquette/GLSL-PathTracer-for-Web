@@ -637,6 +637,10 @@ export class Renderer {
         {
             if (!this.denoised || (this.frameCounter % (scene.renderOptions.denoiserFrameCnt * (this.numTiles.x * this.numTiles.y)) == 0))
             {
+                if (this.denoiserInputFramePtr === null || this.denoiserInputFramePtr.length !== this._renderSize.x * this._renderSize.y * 4) {
+                  this.denoiserInputFramePtr = new Float32Array(this._renderSize.x * this._renderSize.y * 4); // RGBA
+                }
+
                 gl.bindFramebuffer(gl.raw.FRAMEBUFFER, this.denoiserFBO);
                 gl.bindTexture(gl.raw.TEXTURE_2D, this.tileOutputTexture[1 - this.currentBuffer]);
                 gl.raw.readPixels(0, 0, this._renderSize.x, this._renderSize.y, gl.raw.RGBA, gl.raw.FLOAT, this.denoiserInputFramePtr);

@@ -50,6 +50,7 @@ export class RenderOptions {
         this.texArrayHeight = 2048;
         this.enableRR = true;
         this.enableDenoiser = false;
+        this.denoiserFrameCnt = 10;
         this.enableTonemap = true;
         this.enableAces = false;
         this.simpleAcesFit = false;
