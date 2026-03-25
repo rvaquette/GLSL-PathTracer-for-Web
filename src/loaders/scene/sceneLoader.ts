@@ -156,7 +156,7 @@ export async function loadSceneFromJsonAsync(
     scene.materialsDataArray = getFloat4Array(buffer, sceneConfig.indices.materialsTex, sceneConfig.indices.transformsTex);
     scene.transformsDataArray = getFloat4Array(buffer, sceneConfig.indices.transformsTex, sceneConfig.indices.lightsTex);
     scene.lightsDataArray = getFloat3Array(buffer, sceneConfig.indices.lightsTex, sceneConfig.indices.BVH); 
-    scene.bvhDataArray = getFloat4Array(buffer, sceneConfig.indices.BVH, sceneConfig.indices.vertexIndicesTex);
+    scene.bvhDataArray = getFloat3Array(buffer, sceneConfig.indices.BVH, sceneConfig.indices.vertexIndicesTex);
     scene.vertIndicesDataArray = getInt3Array(buffer, sceneConfig.indices.vertexIndicesTex, sceneConfig.indices.verticesTex);
     scene.verticesDataArray = getFloat4Array(buffer, sceneConfig.indices.verticesTex, sceneConfig.indices.normalsTex);
     scene.normalsDataArray = getFloat4Array(buffer, sceneConfig.indices.normalsTex, 2 * sceneConfig.indices.normalsTex - sceneConfig.indices.verticesTex); // normals are stored as float4, but w component is unused

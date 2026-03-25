@@ -516,6 +516,12 @@ export class Renderer {
             gl.viewport(this.tileWidth * this.tile.x, this.tileHeight * this.tile.y, this.tileWidth, this.tileHeight);
             gl.bindTexture(gl.raw.TEXTURE_2D, this.pathTraceTexture);
             this.quad.draw(this.outputShader!);
+            
+            gl.bindFramebuffer(gl.raw.FRAMEBUFFER, this.outputFBO);
+            gl.framebufferTexture2D(gl.raw.FRAMEBUFFER, gl.raw.COLOR_ATTACHMENT0, gl.raw.TEXTURE_2D, this.tileOutputTexture[this.currentBuffer], 0);
+            gl.viewport(0, 0, this.renderSize.x, this.renderSize.y);
+            gl.bindTexture(gl.raw.TEXTURE_2D, this.accumTexture);
+            this.quad.draw(this.tonemapShader!);
         }
 
         gl.bindFramebuffer(gl.raw.FRAMEBUFFER, null);
