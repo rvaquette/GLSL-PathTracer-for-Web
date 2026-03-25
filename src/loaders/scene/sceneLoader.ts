@@ -133,11 +133,13 @@ export async function loadSceneFromJsonAsync(
     renderOptions.openglNormalMap = sceneConfig.defines.includes('OPT_OPENGL_NORMALMAP');
     renderOptions.enableBackground = sceneConfig.defines.includes('OPT_BACKGROUND');
     renderOptions.transparentBackground = sceneConfig.defines.includes('OPT_TRANSPARENT_BACKGROUND');
-    renderOptions.enableVolumeMIS = sceneConfig.defines.includes('OPT_VOLUME_MIS');
-    renderOptions.renderResolution = new Vec2(...sceneConfig.resolution);
-    renderOptions.windowResolution = new Vec2(...sceneConfig.resolution);
-    renderOptions.tileWidth = sceneConfig.tileWidth;
-    renderOptions.tileHeight = sceneConfig.tileHeight;
+    renderOptions.enableVolumeMIS = sceneConfig.defines.includes('OPT_VOL_MIS');
+    if (sceneConfig.resolution) {
+        renderOptions.renderResolution = new Vec2(...sceneConfig.resolution);
+        renderOptions.windowResolution = new Vec2(...sceneConfig.resolution);
+        renderOptions.tileWidth = sceneConfig.tileWidth;
+        renderOptions.tileHeight = sceneConfig.tileHeight;
+    }
 
     // Materials
     scene.hasAlphaTest = sceneConfig.defines.includes('OPT_ALPHA_TEST');
