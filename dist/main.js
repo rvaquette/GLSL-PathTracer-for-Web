@@ -47,6 +47,7 @@ export class Main {
     }
     async getSceneFilesAsync() {
         try {
+            let path = window.location.pathname;
             const response = await loadFile("/scenes.json");
             const data = await response.json();
             if (!Array.isArray(data)) {
