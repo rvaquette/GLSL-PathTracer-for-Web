@@ -47,8 +47,8 @@ export class Main {
     }
     async getSceneFilesAsync() {
         try {
-            let path = window.location.pathname;
-            const response = await loadFile("/scenes.json");
+            let path = window.location.origin + window.location.pathname;
+            const response = await loadFile(`${path}/scenes.json`);
             const data = await response.json();
             if (!Array.isArray(data)) {
                 this.sceneConfigs = [];
@@ -66,7 +66,8 @@ export class Main {
     }
     async getEnvMapsAsync() {
         try {
-            let response = await loadFile("/envmaps.json");
+            let path = window.location.origin + window.location.pathname;
+            let response = await loadFile(`${path}/envmaps.json`);
             this.envMaps = await response.json();
         }
         catch (err) {
