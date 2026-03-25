@@ -13,7 +13,6 @@ export class GL {
     checkError(method) {
         if (!GL.profiling)
             return;
-        return;
         const err = this.raw.getError();
         if (err !== this.raw.NO_ERROR) {
             // check warning
@@ -26,26 +25,6 @@ export class GL {
             }
         }
     }
-    // static addTrace(trace: string): void {
-    //     if (!GL.profiling) return;
-    //     GL.traces.push(">>> " + trace);
-    // }
-    // static eraseTraces(): void {
-    //     GL.traces = [];
-    // }
-    // static exportTraces(filename: string): void {
-    //     if (!GL.profiling) return;
-    //     // Export to new file
-    //     let traces = GL.traces.join('\n');
-    //     const blob = new Blob([traces], { type: 'text/plain' });
-    //     const url = URL.createObjectURL(blob);
-    //     const a = document.createElement('a');
-    //     a.href = url;
-    //     a.download = filename;
-    //     a.click();
-    //     URL.revokeObjectURL(url);
-    //     GL.eraseTraces();
-    // }
     generateMipmap(target) {
         return this.raw.generateMipmap(target);
     }

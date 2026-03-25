@@ -36,10 +36,10 @@ export class Scene {
         }
         this.envMap = new EnvironmentMap();
         if (await this.envMap.loadMapAsync(`/scenes/pathtracer/${filename}`)) {
-            console.log(`HDR ${filename} loaded`);
+            console.info(`HDR ${filename} loaded`);
         }
         else {
-            console.log(`Unable to load HDR ${filename}`);
+            console.info(`Unable to load HDR ${filename}`);
             this.envMap = null;
         }
         this.envMapModified = true;

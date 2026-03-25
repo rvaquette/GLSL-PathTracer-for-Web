@@ -24,6 +24,36 @@
     }
     </style>
     <script>
+      (function(){
+          var oldLog = console.info;
+          console.info = function (...data) {
+              var message = data.map(d => {
+                  if (typeof d === 'object') {
+                      try {
+                          return JSON.stringify(d, null, 2);
+                      } catch (e) {
+                          return String(d);
+                      }
+                  }
+                  return String(d);
+              }).join(' ');
+              const logger = document.getElementById('info');
+              if (logger) logger.innerHTML = message;
+          };
+      })();
+
+      (function(){
+          var oldClear = console.clear;
+          console.clear = function (...data) {
+              const logger = document.getElementById('info');
+              if (logger) logger.innerHTML = '';
+              
+              logger = document.getElementById('log');
+              if (logger) logger.innerHTML = '';
+          };
+      })();
+    </script>
+    <script>
       function getSceneName() {
         let scene = '';
 
@@ -78,6 +108,7 @@
       <div style="float: right;">
         <button onclick="fullScreen()"><img src="img/themes/dark/fullscreen.png"></button>
       </div>
+      <pre id="log" style="text-align: left; max-height: 40px;"></pre>
     </span>
     <script type="module">
       import { Main } from './dist/main.js';

@@ -4,7 +4,7 @@ export class Shader {
     constructor(sourceObj, shaderType) {
         const gl = Context.gl;
         this.shader = gl.createShader(shaderType);
-        console.log(`Compiling Shader ${sourceObj.path}`);
+        console.info(`Compiling Shader ${sourceObj.path}`);
         gl.shaderSource(this.shader, sourceObj.src);
         gl.compileShader(this.shader);
         const success = gl.getShaderParameter(this.shader, gl.raw.COMPILE_STATUS);
@@ -17,13 +17,6 @@ export class Shader {
             console.error(msg);
             throw new Error(msg);
         }
-        // if (sourceObj.dump) {
-        //     console.log(`Shader ${sourceObj.path} compiled successfully.`);
-        //     const src = gl
-        //         .getExtension("WEBGL_debug_shaders")
-        //         .getTranslatedShaderSource(this.shader);
-        //     console.log(src);
-        // }
     }
     getObject() {
         if (!this.shader) {

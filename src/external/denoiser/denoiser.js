@@ -96546,7 +96546,8 @@ class Denoiser {
             this.tiler.abort();
     }
     dispose() {
-        this.unet.dispose();
+        if (this.unet)
+            this.unet.dispose();
         if (this.tiler)
             this.tiler.dispose();
         this.resetInputs();

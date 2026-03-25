@@ -32,7 +32,6 @@ export class Context {
         this.gl.raw.hint(this.gl.raw.FRAGMENT_SHADER_DERIVATIVE_HINT, this.gl.raw.NICEST);
 
         const available_extensions = rawGL.getSupportedExtensions();
-        console.log('Available WebGL extensions:\n', available_extensions.join('\n'));
         
         window.addEventListener("resize", async (event) => {
             //await Main.instance.resizeAsync(window.innerWidth, window.innerHeight);

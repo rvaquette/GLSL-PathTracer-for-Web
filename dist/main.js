@@ -240,7 +240,6 @@ export class Main {
         this.bench = new GLBench(Context.gl.raw, {
             trackGPU: true,
             paramLogger: (i, cpu, gpu, mem, fps, totalTime, frameId) => {
-                // console.log(`${i} -- Frame ${frameId}, CPU ${cpu.toFixed(2)} ms, GPU ${gpu.toFixed(2)} ms, MEM ${mem} KB, FPS ${fps.toFixed(2)}, Total Time ${totalTime.toFixed(2)} ms`); 
             }
         });
         await this.getSceneFilesAsync();
@@ -251,6 +250,7 @@ export class Main {
         if (config.scene !== null && config.scene !== "") {
             await this.startSceneAsync(config.scene);
         }
+        console.log();
     }
 }
 //# sourceMappingURL=main.js.map

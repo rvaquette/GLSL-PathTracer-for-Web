@@ -18,8 +18,6 @@ export class GL {
 
     private checkError(method: string): void {
         if (!GL.profiling) return;
-        
-        return;
 
         const err = this.raw.getError();
         if (err !== this.raw.NO_ERROR) {
@@ -32,31 +30,6 @@ export class GL {
             }
         }
     }
-
-    // static addTrace(trace: string): void {
-    //     if (!GL.profiling) return;
-    //     GL.traces.push(">>> " + trace);
-    // }
-    
-    // static eraseTraces(): void {
-    //     GL.traces = [];
-    // }
-
-    // static exportTraces(filename: string): void {
-    //     if (!GL.profiling) return;
-        
-    //     // Export to new file
-    //     let traces = GL.traces.join('\n');
-    //     const blob = new Blob([traces], { type: 'text/plain' });
-    //     const url = URL.createObjectURL(blob);
-    //     const a = document.createElement('a');
-    //     a.href = url;
-    //     a.download = filename;
-    //     a.click();
-    //     URL.revokeObjectURL(url);
-
-    //     GL.eraseTraces();
-    // }
 
     generateMipmap(target: number) {
         return this.raw.generateMipmap(target);
