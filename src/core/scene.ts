@@ -1,13 +1,6 @@
-import path from "path";
-import { getImageData } from "../loaders/img/getImageData.js";
-import { Mat4 } from "../math/mat4.js";
 import { Vec3 } from "../math/vec3.js";
-import { Vec4 } from "../math/vec4.js";
 import { Camera } from "./camera.js";
-import { Context } from "./context.js";
 import { EnvironmentMap } from "./environmentMap.js";
-import { Light } from "./light.js";
-import { AlphaMode, Material, MediumType } from "./material.js";
 import { RenderOptions } from "./renderOptions.js";
 
 export interface Indices {

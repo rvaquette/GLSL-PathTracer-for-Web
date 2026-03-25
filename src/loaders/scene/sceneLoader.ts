@@ -1,14 +1,9 @@
-import { Light, LightType } from "../../core/light.js";
-import { AlphaMode, Material, MediumType } from "../../core/material.js";
 import { RenderOptions } from "../../core/renderOptions.js";
 import { Scene } from "../../core/scene.js";
-import { Mat4 } from "../../math/mat4.js";
 import { Vec2 } from "../../math/vec2.js";
 import { Vec3 } from "../../math/vec3.js";
-import { Vec4 } from "../../math/vec4.js";
 import { Context } from "../../core/context.js";
 import { Main } from "../../main.js";
-import { loadFile } from "../../utilities/fsLoader.js";
 import { Camera } from "../../core/camera.js";
 import { AzureBlobUtil } from "../../utilities/blob.js";
 

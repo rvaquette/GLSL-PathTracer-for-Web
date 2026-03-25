@@ -1,5 +1,4 @@
 import { Vec2 } from "../math/vec2.js";
-import { Vec3 } from "../math/vec3.js";
 import { Context } from "./context.js";
 import { GL } from "./GL.js";
 import { Program } from "./program.js";

@@ -1,5 +1,4 @@
 import { Main } from '../main.js';
-import { AlphaMode, Material, MediumType } from '../core/material.js';
 import GUI from '../external/gui/lil-gui.esm.js';
 import { MathUtils } from '../math/mathUtils.js';
 import { Vec3 } from '../math/vec3.js';
