@@ -14,7 +14,7 @@ export class AzureBlobUtil {
         }
     }
 
-    static buildUrl(blobPath: string, blobStart: string = "scenes/shadertoy/glsl-pathtracer"): string {
+    static buildUrl(blobPath: string, blobStart: string = "scenes/shadertoy/examples/glsl-pathtracer"): string {
         return `https://rvawebgl.blob.core.windows.net/$web/${blobStart}/${blobPath}`;
     }
 }

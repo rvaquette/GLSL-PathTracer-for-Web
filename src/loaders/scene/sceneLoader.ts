@@ -11,6 +11,7 @@ import { Main } from "../../main.js";
 import { loadFile } from "../../utilities/fsLoader.js";
 import { Camera } from "../../core/camera.js";
 import { AzureBlobUtil } from "../../utilities/blob.js";
+import { blob } from "stream/consumers";
 
 interface SceneCameraConfig {
     eye: [number, number, number];
@@ -31,7 +32,7 @@ interface SceneIndicesConfig {
     materialsTex: number;
     transformsTex: number;
     lightsTex: number;
-    BVHTex: number;
+    BVH: number;
     vertexIndicesTex: number;
     verticesTex: number;
     normalsTex: number;
@@ -55,6 +56,31 @@ export interface SceneFileConfig {
     resolution: [number, number];
     tileWidth: number;
     tileHeight: number;
+}
+
+function getFloat4Array(buffer: Float32Array, offset1: number, offset2?: number): Float32Array {
+    if (offset2 === undefined) {
+        return buffer.subarray(offset1 * 4);
+    }
+    return buffer.subarray(offset1 * 4, offset2 * 4);
+}
+
+function getFloat3Array(buffer: Float32Array, offset1: number, offset2: number): Float32Array {
+    let tmp1 = buffer.subarray(offset1 * 4, offset2 * 4);
+    let tmp2 = [];
+    for (let i = 0; i < tmp1.length; i += 3) {
+        tmp2.push(new Vec3(tmp1[i], tmp1[i + 1], tmp1[i + 2]));
+    }
+    return new Float32Array(tmp2.flatMap(vec => [vec.x, vec.y, vec.z])); 
+}
+
+function getInt3Array(buffer: Float32Array, offset1: number, offset2: number): Int32Array {
+    let tmp1 = buffer.subarray(offset1 * 4, offset2 * 4);
+    let tmp2 = [];
+    for (let i = 0; i < tmp1.length; i += 3) {
+        tmp2.push(new Vec3(tmp1[i], tmp1[i + 1], tmp1[i + 2]));
+    }
+    return new Int32Array(tmp2.flatMap(vec => [vec.x, vec.y, vec.z])); 
 }
 
 /**
@@ -124,14 +150,14 @@ export async function loadSceneFromJsonAsync(
     scene.numOfLights = sceneConfig.uniforms.numOfLights;
 
     let meshDataBlob = await AzureBlobUtil.readBlob(`${scene.sceneName}/meshData.bin`);
-    let meshDataArray = new Float32Array(await meshDataBlob?.arrayBuffer());
-    scene.materialsDataArray = meshDataArray.subarray(0, sceneConfig.indices.materialsTex * 4);
-    scene.transformsDataArray = meshDataArray.subarray(sceneConfig.indices.materialsTex * 4, sceneConfig.indices.lightsTex * 4);
-    scene.lightsDataArray = meshDataArray.subarray(sceneConfig.indices.lightsTex * 4, sceneConfig.indices.BVHTex * 4);
-    scene.bvhDataArray = meshDataArray.subarray(sceneConfig.indices.BVHTex * 4, sceneConfig.indices.vertexIndicesTex * 4);
-    scene.vertIndicesDataArray = new Int32Array(meshDataArray.buffer, sceneConfig.indices.vertexIndicesTex * 4, (sceneConfig.indices.verticesTex - sceneConfig.indices.vertexIndicesTex) * 4 / Int32Array.BYTES_PER_ELEMENT);
-    scene.verticesDataArray = meshDataArray.subarray(sceneConfig.indices.verticesTex * 4, sceneConfig.indices.normalsTex * 4);
-    scene.normalsDataArray = meshDataArray.subarray(sceneConfig.indices.normalsTex * 4);
+    let buffer = new Float32Array(await meshDataBlob?.arrayBuffer(), 20); // skip 20 bytes (header of .bin)
+    scene.materialsDataArray = getFloat4Array(buffer, sceneConfig.indices.materialsTex, sceneConfig.indices.transformsTex);
+    scene.transformsDataArray = getFloat4Array(buffer, sceneConfig.indices.transformsTex, sceneConfig.indices.lightsTex);
+    scene.lightsDataArray = getFloat3Array(buffer, sceneConfig.indices.lightsTex, sceneConfig.indices.BVH); 
+    scene.bvhDataArray = getFloat4Array(buffer, sceneConfig.indices.BVH, sceneConfig.indices.vertexIndicesTex);
+    scene.vertIndicesDataArray = getInt3Array(buffer, sceneConfig.indices.vertexIndicesTex, sceneConfig.indices.verticesTex);
+    scene.verticesDataArray = getFloat4Array(buffer, sceneConfig.indices.verticesTex, sceneConfig.indices.normalsTex);
+    scene.normalsDataArray = getFloat4Array(buffer, sceneConfig.indices.normalsTex);
 
     // Textures
     if (sceneConfig.withTexture) {
