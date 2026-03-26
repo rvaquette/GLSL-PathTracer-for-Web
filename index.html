@@ -47,9 +47,6 @@
           console.clear = function (...data) {
               const logger = document.getElementById('info');
               if (logger) logger.innerHTML = '';
-              
-              logger = document.getElementById('log');
-              if (logger) logger.innerHTML = '';
           };
       })();
     </script>
@@ -95,25 +92,18 @@
     <span style="
       position: absolute;
       top: 10px;
-      left: 100px;
+      left: 60px;
       padding: 10px;
       display: flex;
-      gap: 10px;
+      gap: 4px;
       background: rgba(35, 39, 46, 0.7);
-      border-radius: 8px;
       z-index: 10;
       align-items: center;
     ">
-      <button onclick="let stopped = pauseOrContinue();document.getElementById('playPauseButton').src = !stopped ? 'img/themes/dark/pause.png' : 'img/themes/dark/play.png';"><img id="playPauseButton" src="img/themes/dark/pause.png" /></button>
-      <div style="float: right;">
-        <button onclick="fullScreen()"><img src="img/themes/dark/fullscreen.png"></button>
-      </div>
-      <pre id="log" style="text-align: left; max-height: 40px;"></pre>
+      <pre id="info" style="text-align: left; max-height: 40px;"></pre>
     </span>
     <script type="module">
       import { Main } from './dist/main.js';
-      import { GL } from './dist/core/GL.js';
-
       window.fullScreen = async function() {
         const canvas = document.getElementById('canvas');
         if (canvas.requestFullscreen) {
@@ -130,12 +120,8 @@
       window.loadSceneAsync = async function(config) {
         await Main.instance.runAsync(config);
       }
-      window.pauseOrContinue = function() {
-        return Main.instance.pauseOrContinue();
-      }
       window.setSceneName = function(name) {
         window.sceneName = name;
-        document.getElementById('playPauseButton').src = 'img/themes/dark/pause.png';
       }
     </script>
   </body>

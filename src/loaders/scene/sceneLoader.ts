@@ -6,6 +6,7 @@ import { Context } from "../../core/context.js";
 import { Main } from "../../main.js";
 import { Camera } from "../../core/camera.js";
 import { AzureBlobUtil } from "../../utilities/blob.js";
+import { MeshInstance } from "../../core/mesh.js";
 
 interface SceneCameraConfig {
     eye: [number, number, number];
@@ -39,6 +40,11 @@ interface SceneDisplayConfig {
     backgroundCol: [number, number, number];
 }
 
+interface SceneMeshConfig {
+    name: string;
+    material: string;
+}
+
 export interface SceneFileConfig {
     scene: string;
     camera: SceneCameraConfig;
@@ -46,6 +52,8 @@ export interface SceneFileConfig {
     indices: SceneIndicesConfig;
     display: SceneDisplayConfig;
     defines: string[];
+    materials: string[];
+    meshes: SceneMeshConfig[];
     withTexture: boolean;
     resolution: [number, number];
     tileWidth: number;
@@ -163,16 +171,7 @@ export async function loadSceneFromJsonAsync(
         renderOptions.tileHeight = sceneConfig.tileHeight;
     }
 
-    // Materials
-    scene.hasAlphaTest = sceneConfig.defines.includes('OPT_ALPHA_TEST');
-    scene.hasMedium = sceneConfig.defines.includes('OPT_MEDIUM');
-
-    // BVH
-    scene.topLevelIndex = sceneConfig.uniforms.topBVHIndex;
-
-    // Lights
-    scene.numOfLights = sceneConfig.uniforms.numOfLights;
-
+    // Data arrays
     let meshDataBlob = await AzureBlobUtil.readBlob(`${scene.sceneName}/meshData.bin`);
     let buffer = new Float32Array(await meshDataBlob?.arrayBuffer(), 20); // skip 20 bytes (header of .bin)
     scene.materialsDataArray = getFloat4Array(buffer, sceneConfig.indices.materialsTex, sceneConfig.indices.transformsTex);
@@ -182,6 +181,23 @@ export async function loadSceneFromJsonAsync(
     scene.vertIndicesDataArray = getInt3Array(buffer, sceneConfig.indices.vertexIndicesTex, sceneConfig.indices.verticesTex);
     scene.verticesDataArray = getFloat4Array(buffer, sceneConfig.indices.verticesTex, sceneConfig.indices.normalsTex);
     scene.normalsDataArray = getFloat4Array(buffer, sceneConfig.indices.normalsTex, 2 * sceneConfig.indices.normalsTex - sceneConfig.indices.verticesTex); // normals are stored as float4, but w component is unused
+
+    // BVH
+    scene.topLevelIndex = sceneConfig.uniforms.topBVHIndex;
+
+    // Lights
+    scene.numOfLights = sceneConfig.uniforms.numOfLights;
+
+    // Materials
+    sceneConfig.materials.forEach((matName, index, array) => {
+        scene.materials[index+1].name = matName;
+    });
+
+    // Meshes
+    sceneConfig.meshes.forEach((meshConfig, index, array) => {
+        let meshInstance = new MeshInstance(meshConfig.name, scene.materials.find(mat => mat.name === meshConfig.material) || null);
+        scene.meshes.push(meshInstance);
+    });
 
     // Textures
     if (sceneConfig.withTexture) {

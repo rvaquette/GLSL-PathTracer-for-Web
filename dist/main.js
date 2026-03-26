@@ -29,6 +29,7 @@ export class Main {
     firstTime;
     bench = null;
     optionsChanged = false;
+    objectPropChanged = false;
     reloadShaders = false;
     constructor() {
         this.lastTime = performance.now();
@@ -174,6 +175,10 @@ export class Main {
             this.scene.dirty = true;
             this.firstTime = now;
         }
+        if (this.objectPropChanged) {
+            this.objectPropChanged = false;
+            this.scene.rebuildInstances();
+        }
         if (this.reloadShaders) {
             this.reloadShaders = false;
             this.scene.dirty = true;
@@ -252,7 +257,7 @@ export class Main {
         if (config.scene !== null && config.scene !== "") {
             await this.startSceneAsync(config.scene);
         }
-        console.log();
+        console.clear();
     }
 }
 //# sourceMappingURL=main.js.map

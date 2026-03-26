@@ -501,6 +501,7 @@ export class Renderer {
             gl.viewport(0, 0, Math.floor(this.windowSize.x * this.pixelRatio), Math.floor(this.windowSize.y * this.pixelRatio));
             this.quad.draw(this.pathTraceShaderLowRes!);
 
+            this.scene.instancesModified = false;
             this.scene.dirty = false;
             this.scene.envMapModified = false;
         } else {
@@ -609,6 +610,12 @@ export class Renderer {
 
         if (!scene.dirty && scene.renderOptions.maxSpp !== -1 && this.sampleCounter >= scene.renderOptions.maxSpp) {
             return;
+        }
+
+        if (scene.instancesModified) {
+            const matData = this.scene.materialsDataArray;
+            gl.bindTexture(gl.raw.TEXTURE_2D, this.materialsTex);
+            gl.texImage2D(gl.raw.TEXTURE_2D, 0, gl.raw.RGBA32F, this.scene.materials.length * 8, 1, 0, gl.raw.RGBA, gl.raw.FLOAT, matData);
         }
 
         if (scene.envMapModified && scene.envMap) {

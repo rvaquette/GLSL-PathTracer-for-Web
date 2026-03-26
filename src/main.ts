@@ -35,6 +35,7 @@ export class Main {
     private bench: GLBench | null = null;
     
     optionsChanged: boolean = false;
+    objectPropChanged: boolean = false;
     reloadShaders: boolean = false;
 
     private constructor() {
@@ -207,6 +208,11 @@ export class Main {
             this.firstTime = now;
         }
 
+        if (this.objectPropChanged) {
+            this.objectPropChanged = false;
+            this.scene.rebuildInstances();
+        }
+
         if (this.reloadShaders)
         {
             this.reloadShaders = false;
@@ -312,7 +318,7 @@ export class Main {
             await this.startSceneAsync(config.scene);
         }
         
-        console.log();
+        console.clear();
     }
 }
 
