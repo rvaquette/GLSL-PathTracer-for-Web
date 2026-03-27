@@ -122,6 +122,8 @@ export class Main {
         this.scene.renderOptions = this.renderOptions;
         this.resizeCanvas(this.renderOptions.windowResolution.x, this.renderOptions.windowResolution.y);
 
+        console.clear();
+        
         return true;
     }
 

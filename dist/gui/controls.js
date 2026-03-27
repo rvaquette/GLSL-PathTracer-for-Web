@@ -112,8 +112,12 @@ export class Controls {
         });
         // Denoiser
         let denoiser = gui.addFolder('Denoiser').close();
-        denoiser.add(renderOptions, 'enableDenoiser').listen().name('Enable Denoiser');
-        denoiser.add(renderOptions, 'denoiserFrameCnt', 5, 50).listen().name('Number of Frames to skip');
+        denoiser.add(renderOptions, 'enableDenoiser').listen().name('Enable Denoiser').onChange((value) => {
+            main.optionsChanged = true;
+        });
+        denoiser.add(renderOptions, 'denoiserFrameCnt', 5, 50).listen().name('Number of Frames to skip').onChange((value) => {
+            main.optionsChanged = true;
+        });
         // Camera
         let camera = gui.addFolder('Camera').close();
         let fov = MathUtils.degrees(scene.camera.fov);

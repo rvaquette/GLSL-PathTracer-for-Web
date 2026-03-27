@@ -173,6 +173,10 @@ export async function loadSceneFromJsonAsync(
         renderOptions.tileHeight = sceneConfig.tileHeight;
     }
 
+    // Materials
+    scene.hasAlphaTest = sceneConfig.defines.includes('OPT_ALPHA_TEST');
+    scene.hasMedium = sceneConfig.defines.includes('OPT_MEDIUM');
+    
     // Data arrays
     let meshDataBlob = await AzureBlobUtil.readBlob(`${scene.sceneName}/meshData.bin`);
     let buffer = new Float32Array(await meshDataBlob?.arrayBuffer(), 20); // skip 20 bytes (header of .bin)
@@ -189,7 +193,7 @@ export async function loadSceneFromJsonAsync(
 
     // Lights
     scene.numOfLights = sceneConfig.uniforms.numOfLights;
-/*
+
     // Materials
     sceneConfig.materials.forEach((matName, index, array) => {
         scene.materials[index+1].name = matName;
@@ -199,7 +203,7 @@ export async function loadSceneFromJsonAsync(
     sceneConfig.meshes.forEach((meshConfig, index, array) => {
         let meshInstance = new MeshInstance(meshConfig.name, scene.materials.find(mat => mat.name === meshConfig.material) || null);
         scene.meshes.push(meshInstance);
-    });*/
+    });
 
     // Textures
     if (sceneConfig.withTexture) {

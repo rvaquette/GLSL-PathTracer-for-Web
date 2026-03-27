@@ -127,7 +127,9 @@ export class Controls {
         // Denoiser
         let denoiser = gui.addFolder('Denoiser').close();
         denoiser.add(renderOptions, 'enableDenoiser').listen().name('Enable Denoiser');
-        denoiser.add(renderOptions, 'denoiserFrameCnt', 5, 50).listen().name('Number of Frames to skip')
+        denoiser.add(renderOptions, 'denoiserFrameCnt', 5, 50).listen().name('Number of Frames to skip').onChange((value: number) => {
+            main.optionsChanged = true;
+        });
 
         // Camera
         let camera = gui.addFolder('Camera').close();  

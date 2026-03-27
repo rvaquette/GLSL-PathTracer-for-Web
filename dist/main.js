@@ -103,6 +103,7 @@ export class Main {
         // @ts-ignore
         this.scene.renderOptions = this.renderOptions;
         this.resizeCanvas(this.renderOptions.windowResolution.x, this.renderOptions.windowResolution.y);
+        console.clear();
         return true;
     }
     async initRendererAsync() {

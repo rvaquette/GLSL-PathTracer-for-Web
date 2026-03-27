@@ -377,7 +377,6 @@ export class Renderer {
         this.pathTraceShaderLowRes = null;
         this.outputShader = null;
         this.tonemapShader = null;
-        this.denoiser = null;
 
         this.programs.forEach(program => program.dispose());
         this.programs = [];
@@ -549,59 +548,6 @@ export class Renderer {
 
     public getSampleCount(): number {
         return this.sampleCounter;
-    }
-
-    public exportTextureToImage(texture: WebGLTexture | null, width: number, height: number, filename: string): void {
-        if (!texture) {
-            return;
-        }
-
-        const gl = this.gl;
-
-        const fbo = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.raw.FRAMEBUFFER, fbo);
-        gl.framebufferTexture2D(gl.raw.FRAMEBUFFER, gl.raw.COLOR_ATTACHMENT0, gl.raw.TEXTURE_2D, texture, 0);
-
-        if (gl.raw.checkFramebufferStatus(gl.raw.FRAMEBUFFER) !== gl.raw.FRAMEBUFFER_COMPLETE) {
-            gl.bindFramebuffer(gl.raw.FRAMEBUFFER, null);
-            gl.deleteFramebuffer(fbo);
-            return;
-        }
-
-        const pixelsFloat = new Float32Array(width * height * 4);
-        gl.raw.readPixels(0, 0, width, height, gl.raw.RGBA, gl.raw.FLOAT, pixelsFloat);
-
-        const pixels = new Uint8Array(width * height * 4);
-        for (let i = 0; i < pixelsFloat.length; i++) {
-            pixels[i] = Math.min(255, Math.max(0, Math.floor(pixelsFloat[i] * 255)));
-        }
-
-        gl.bindFramebuffer(gl.raw.FRAMEBUFFER, null);
-        gl.deleteFramebuffer(fbo);
-
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-
-        if (!ctx) {
-            return;
-        }
-
-        const imageData = ctx.createImageData(width, height);
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const srcIdx = (y * width + x) * 4;
-                const dstIdx = ((height - 1 - y) * width + x) * 4;
-                imageData.data[dstIdx] = pixels[srcIdx];
-                imageData.data[dstIdx + 1] = pixels[srcIdx + 1];
-                imageData.data[dstIdx + 2] = pixels[srcIdx + 2];
-                imageData.data[dstIdx + 3] = pixels[srcIdx + 3];
-            }
-        }
-
-        ctx.putImageData(imageData, 0, 0);
-        Context.document.getElementById(filename)?.appendChild(canvas);
     }
 
     public async updateAsync(_secondsElapsed: number, _secondsElapsedDelta: number): Promise<void> {

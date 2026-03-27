@@ -61,6 +61,7 @@ export function getImageData(image, width, height, flip = false) {
  * @returns Promise<boolean> indicating success.
  */
 export async function loadSceneFromJsonAsync(sceneName, scene, renderOptions) {
+    console.info(`Loading scene ${sceneName}...`);
     let sceneConfig = Main.instance.sceneConfigs.find(config => config.scene === sceneName);
     scene.sceneName = sceneConfig.scene;
     // Camera
@@ -102,6 +103,9 @@ export async function loadSceneFromJsonAsync(sceneName, scene, renderOptions) {
         renderOptions.tileWidth = sceneConfig.tileWidth;
         renderOptions.tileHeight = sceneConfig.tileHeight;
     }
+    // Materials
+    scene.hasAlphaTest = sceneConfig.defines.includes('OPT_ALPHA_TEST');
+    scene.hasMedium = sceneConfig.defines.includes('OPT_MEDIUM');
     // Data arrays
     let meshDataBlob = await AzureBlobUtil.readBlob(`${scene.sceneName}/meshData.bin`);
     let buffer = new Float32Array(await meshDataBlob?.arrayBuffer(), 20); // skip 20 bytes (header of .bin)
