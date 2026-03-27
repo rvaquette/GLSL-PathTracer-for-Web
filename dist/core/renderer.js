@@ -75,6 +75,7 @@ export class Renderer {
         this.pixelRatio = scene.renderOptions.pixelRatio;
         await this.initFBOsAsync();
         await this.initShadersAsync();
+        console.clear();
     }
     createTexture(internalFormat, width, height, format, type, data) {
         const gl = this.gl;
@@ -214,6 +215,7 @@ export class Renderer {
         this.dispose();
         await this.initFBOsAsync();
         await this.initShadersAsync();
+        console.clear();
     }
     pauseOrContinue(_paused) {
     }
@@ -289,6 +291,7 @@ export class Renderer {
         this.programs.forEach(program => program.dispose());
         this.programs = [];
         await this.initShadersAsync();
+        console.clear();
     }
     loadShaders(vertexSource, fragmentSource) {
         const shaders = [

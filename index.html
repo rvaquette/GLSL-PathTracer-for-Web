@@ -38,7 +38,12 @@
                   return String(d);
               }).join(' ');
               const logger = document.getElementById('info');
-              if (logger) logger.innerHTML = message;
+              if (logger) {
+                if (logger.style.visibility !== 'visible') {
+                  logger.style.visibility = 'visible';
+                }
+                logger.innerHTML = message;
+              }
           };
       })();
 
@@ -46,7 +51,10 @@
           var oldClear = console.clear;
           console.clear = function (...data) {
               const logger = document.getElementById('info');
-              if (logger) logger.innerHTML = '';
+              if (logger) {
+                logger.innerHTML = '';
+                logger.style.visibility = 'hidden';
+              }
           };
       })();
     </script>
@@ -89,7 +97,7 @@
   <body onload="watchInit()">
     <canvas id="canvas" class="playerCanvas">
     </canvas>
-    <span style="
+    <pre id="info" style="
       position: absolute;
       top: 10px;
       left: 120px;
@@ -99,9 +107,7 @@
       background: rgba(35, 39, 46, 0.7);
       z-index: 10;
       align-items: center;
-    ">
-      <pre id="info" style="text-align: left; max-height: 40px;"></pre>
-    </span>
+      text-align: left; max-height: 40px; overflow: hidden;"></pre>
     <script type="module">
       import { Main } from './dist/main.js';
       window.fullScreen = async function() {

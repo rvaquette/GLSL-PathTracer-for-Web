@@ -93,6 +93,7 @@ export class Renderer {
 
         await this.initFBOsAsync();
         await this.initShadersAsync();
+        console.clear();
     }
 
     private createTexture(internalFormat: number, width: number, height: number, format: number, type: number, data: ArrayBufferView | null): WebGLTexture {
@@ -273,6 +274,7 @@ export class Renderer {
         this.dispose();
         await this.initFBOsAsync();
         await this.initShadersAsync();
+        console.clear();
     }
 
     public pauseOrContinue(_paused: boolean): void {
@@ -382,6 +384,7 @@ export class Renderer {
         this.programs = [];
 
         await this.initShadersAsync();
+        console.clear();
     }
 
     private loadShaders(vertexSource: ShaderSource, fragmentSource: ShaderSource): Program {
