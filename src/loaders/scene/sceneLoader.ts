@@ -126,6 +126,8 @@ export async function loadSceneFromJsonAsync(
         renderOptions: RenderOptions
 ): Promise<boolean> {
     
+    console.info(`Loading scene ${sceneName}...`);
+    
     let sceneConfig = Main.instance.sceneConfigs.find(config => config.scene === sceneName);    
 
     scene.sceneName = sceneConfig.scene;
@@ -187,7 +189,7 @@ export async function loadSceneFromJsonAsync(
 
     // Lights
     scene.numOfLights = sceneConfig.uniforms.numOfLights;
-
+/*
     // Materials
     sceneConfig.materials.forEach((matName, index, array) => {
         scene.materials[index+1].name = matName;
@@ -197,7 +199,7 @@ export async function loadSceneFromJsonAsync(
     sceneConfig.meshes.forEach((meshConfig, index, array) => {
         let meshInstance = new MeshInstance(meshConfig.name, scene.materials.find(mat => mat.name === meshConfig.material) || null);
         scene.meshes.push(meshInstance);
-    });
+    });*/
 
     // Textures
     if (sceneConfig.withTexture) {
