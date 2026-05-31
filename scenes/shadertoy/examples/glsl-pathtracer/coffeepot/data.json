@@ -1,0 +1,154 @@
+{
+  "scene": "coffeepot",
+  "camera": {
+    "eye": [
+      -0.0,
+      0.26,
+      0.7
+    ],
+    "lookat": [
+      0.0,
+      0.16,
+      -0.1
+    ],
+    "fov": 30.0
+  },
+  "uniforms": {
+    "uniformLightCol": [
+      0.3,
+      0.3,
+      0.3
+    ],
+    "numOfLights": 3,
+    "maxDepth": 5,
+    "topBVHIndex": 223396,
+    "roughnessMollificationAmt": 0.0,
+    "envMapIntensity": 1.0,
+    "uniformsLightCol": [
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  "indices": {
+    "materialsTex": 0,
+    "transformsTex": 48,
+    "lightsTex": 128,
+    "BVH": 143,
+    "vertexIndicesTex": 670451,
+    "verticesTex": 905716,
+    "normalsTex": 1611511
+  },
+  "display": {
+    "enableTonemap": true,
+    "enableAces": false,
+    "simpleAcesFit": false,
+    "backgroundCol": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "defines": [
+    "OPT_LIGHTS",
+    "OPT_RR",
+    "OPT_RR_DEPTH 2",
+    "OPT_OPENGL_NORMALMAP"
+  ],
+  "withTexture": false,
+  "materials": [
+    "Plastic_Orange",
+    "Plastic_Black",
+    "Glass",
+    "Metal",
+    "Floor"
+  ],
+  "meshes": [
+    {
+      "name": "Mesh003.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh005.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh007.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh008.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh011.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh013.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh014.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh017.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh018.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh019.obj",
+      "material": "Plastic_Black"
+    },
+    {
+      "name": "Mesh000.obj",
+      "material": "Plastic_Orange"
+    },
+    {
+      "name": "Mesh001.obj",
+      "material": "Plastic_Orange"
+    },
+    {
+      "name": "Mesh006.obj",
+      "material": "Plastic_Orange"
+    },
+    {
+      "name": "Mesh009.obj",
+      "material": "Plastic_Orange"
+    },
+    {
+      "name": "Mesh012.obj",
+      "material": "Plastic_Orange"
+    },
+    {
+      "name": "Mesh016.obj",
+      "material": "Plastic_Orange"
+    },
+    {
+      "name": "Mesh010.obj",
+      "material": "Glass"
+    },
+    {
+      "name": "Mesh002.obj",
+      "material": "Metal"
+    },
+    {
+      "name": "Mesh015.obj",
+      "material": "Metal"
+    },
+    {
+      "name": "Mesh004.obj",
+      "material": "Floor"
+    }
+  ],
+  "resolution": [
+    700,
+    900
+  ],
+  "tileWidth": 100,
+  "tileHeight": 100
+}

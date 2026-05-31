@@ -1,0 +1,101 @@
+{
+  "scene": "substanceboy",
+  "camera": {
+    "eye": [
+      0.3,
+      0.11,
+      -0.0
+    ],
+    "lookat": [
+      0.0,
+      0.07,
+      0.0
+    ],
+    "fov": 60.0
+  },
+  "uniforms": {
+    "uniformLightCol": [
+      0.3,
+      0.3,
+      0.3
+    ],
+    "numOfLights": 2,
+    "maxDepth": 2,
+    "topBVHIndex": 80262,
+    "roughnessMollificationAmt": 0.0,
+    "envMapIntensity": 1.0,
+    "uniformsLightCol": [
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  "indices": {
+    "materialsTex": 0,
+    "transformsTex": 40,
+    "lightsTex": 68,
+    "BVH": 78,
+    "vertexIndicesTex": 240906,
+    "verticesTex": 326132,
+    "normalsTex": 581810
+  },
+  "display": {
+    "enableTonemap": true,
+    "enableAces": false,
+    "simpleAcesFit": false,
+    "backgroundCol": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "defines": [
+    "OPT_LIGHTS",
+    "OPT_RR",
+    "OPT_RR_DEPTH 2",
+    "OPT_OPENGL_NORMALMAP"
+  ],
+  "withTexture": true,
+  "materials": [
+    "head",
+    "body",
+    "base",
+    "grid"
+  ],
+  "meshes": [
+    {
+      "name": "background.obj",
+      "material": "grid"
+    },
+    {
+      "name": "head.obj",
+      "material": "head"
+    },
+    {
+      "name": "body.obj",
+      "material": "body"
+    },
+    {
+      "name": "base.obj",
+      "material": "base"
+    },
+    {
+      "name": "head.obj",
+      "material": "head"
+    },
+    {
+      "name": "body.obj",
+      "material": "body"
+    },
+    {
+      "name": "base.obj",
+      "material": "base"
+    }
+  ],
+  "resolution": [
+    1280,
+    720
+  ],
+  "tileWidth": 240,
+  "tileHeight": 144
+}

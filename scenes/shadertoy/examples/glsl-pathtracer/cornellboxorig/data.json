@@ -1,0 +1,104 @@
+{
+  "scene": "cornellboxorig",
+  "camera": {
+    "eye": [
+      0.276,
+      0.275,
+      -0.75
+    ],
+    "lookat": [
+      0.276,
+      0.275,
+      0.1
+    ],
+    "fov": 40.0
+  },
+  "uniforms": {
+    "uniformLightCol": [
+      0.3,
+      0.3,
+      0.3
+    ],
+    "numOfLights": 1,
+    "maxDepth": 2,
+    "topBVHIndex": 27,
+    "roughnessMollificationAmt": 0.0,
+    "envMapIntensity": 2.0,
+    "uniformsLightCol": [
+      0.3,
+      0.3,
+      0.3
+    ]
+  },
+  "indices": {
+    "materialsTex": 0,
+    "transformsTex": 64,
+    "lightsTex": 92,
+    "BVH": 97,
+    "vertexIndicesTex": 220,
+    "verticesTex": 254,
+    "normalsTex": 356
+  },
+  "display": {
+    "enableTonemap": true,
+    "enableAces": false,
+    "simpleAcesFit": false,
+    "backgroundCol": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "defines": [
+    "OPT_LIGHTS",
+    "OPT_RR",
+    "OPT_RR_DEPTH 2",
+    "OPT_OPENGL_NORMALMAP"
+  ],
+  "withTexture": false,
+  "materials": [
+    "ceiling_white",
+    "back_wall_white",
+    "floor_white",
+    "small_box_white",
+    "large_box_white",
+    "red",
+    "green"
+  ],
+  "meshes": [
+    {
+      "name": "cbox_ceiling.obj",
+      "material": "ceiling_white"
+    },
+    {
+      "name": "cbox_floor.obj",
+      "material": "floor_white"
+    },
+    {
+      "name": "cbox_back.obj",
+      "material": "back_wall_white"
+    },
+    {
+      "name": "cbox_smallbox.obj",
+      "material": "small_box_white"
+    },
+    {
+      "name": "cbox_largebox.obj",
+      "material": "large_box_white"
+    },
+    {
+      "name": "cbox_greenwall.obj",
+      "material": "green"
+    },
+    {
+      "name": "cbox_redwall.obj",
+      "material": "red"
+    }
+  ],
+  "resolution": [
+    800,
+    800
+  ],
+  "tileWidth": 200,
+  "tileHeight": 200
+}
