@@ -54,6 +54,8 @@ vec2 BinarySearch(float value)
     return vec2(x, y) / envMapRes;
 }
 
+/*__PROCEDURAL_ENV_INJECTION__*/
+#ifndef MATERIALX_RUNTIME_ENV_EVAL
 vec4 EvalEnvMap(Ray r)
 {
     float theta = acos(clamp(r.direction.y, -1.0, 1.0));
@@ -64,6 +66,7 @@ vec4 EvalEnvMap(Ray r)
                 
     return vec4(color, (pdf * envMapRes.x * envMapRes.y) / (TWO_PI * PI * sin(theta)));
 }
+#endif
 
 vec4 SampleEnvMap(inout vec3 color)
 {

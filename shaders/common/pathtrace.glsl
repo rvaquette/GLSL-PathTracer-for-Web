@@ -22,6 +22,10 @@
  * SOFTWARE.
  */
 
+/*__PROCEDURAL_MATERIAL_INJECTION__*/
+void ApplyProceduralMaterialOverrides(int matId, inout Material mat, inout State state, ivec4 texIDs, Ray r) {}
+void ApplyProceduralMaterialClosureContract(int matId, in Material mat, in State state) {}
+
 void GetMaterial(inout State state, in Ray r)
 {
     int index = state.matID * MATERIALS_TEX_STRIDE;
@@ -149,6 +153,13 @@ void GetMaterial(inout State state, in Ray r)
     if (texIDs.w >= 0)
         mat.emission = pow(texture(textureMapsArrayTex, vec3(state.texCoord * mat.uvScale, texIDs.w)).rgb, vec3(2.2));
 
+    ApplyProceduralMaterialOverrides(state.matID, mat, state, texIDs, r);
+    gMaterialXClosureContractValid = 0;
+    gMaterialXClosureKind = D4_CLOSURE_KIND_GENERIC;
+    gMaterialXClosureModel = 0;
+    gMaterialXClosureFlags = 0;
+    ApplyProceduralMaterialClosureContract(state.matID, mat, state);
+
 #endif
 
 #ifdef OPT_ROUGHNESS_MOLLIFICATION
@@ -249,15 +260,20 @@ vec3 DirectLight(in Ray r, in State state, bool isSurface)
         Li *= EvalTransmittance(shadowRay);
 
         if (isSurface)
-            scatterSample.f = DisneyEval(state, -r.direction, state.ffnormal, lightDir, scatterSample.pdf);
+        {
+            int closureFlags;
+            scatterSample.f = EvalClosure(state, -r.direction, state.ffnormal, lightDir, scatterSample.pdf, closureFlags);
+            scatterSample.flags = closureFlags;
+        }
         else
         {
             float p = PhaseHG(dot(-r.direction, lightDir), state.medium.anisotropy);
             scatterSample.f = vec3(p);
             scatterSample.pdf = p;
+            scatterSample.flags = 0;
         }
 
-        if (scatterSample.pdf > 0.0)
+        if (scatterSample.pdf > 0.0 && (!isSurface || ClosureSupportsDirection(scatterSample.flags, -r.direction, lightDir)))
         {
             float misWeight = PowerHeuristic(lightPdf, scatterSample.pdf);
             if (misWeight > 0.0)
@@ -269,9 +285,11 @@ vec3 DirectLight(in Ray r, in State state, bool isSurface)
         
         if (!inShadow)
         {
-            scatterSample.f = DisneyEval(state, -r.direction, state.ffnormal, lightDir, scatterSample.pdf);
+            int closureFlags;
+            scatterSample.f = EvalClosure(state, -r.direction, state.ffnormal, lightDir, scatterSample.pdf, closureFlags);
+            scatterSample.flags = closureFlags;
 
-            if (scatterSample.pdf > 0.0)
+            if (scatterSample.pdf > 0.0 && ClosureSupportsDirection(scatterSample.flags, -r.direction, lightDir))
             {
                 float misWeight = PowerHeuristic(lightPdf, scatterSample.pdf);
                 if (misWeight > 0.0)
@@ -316,19 +334,24 @@ vec3 DirectLight(in Ray r, in State state, bool isSurface)
             Li *= EvalTransmittance(shadowRay);
 
             if (isSurface)
-                scatterSample.f = DisneyEval(state, -r.direction, state.ffnormal, lightSample.direction, scatterSample.pdf);
+            {
+                int closureFlags;
+                scatterSample.f = EvalClosure(state, -r.direction, state.ffnormal, lightSample.direction, scatterSample.pdf, closureFlags);
+                scatterSample.flags = closureFlags;
+            }
             else
             {
                 float p = PhaseHG(dot(-r.direction, lightSample.direction), state.medium.anisotropy);
                 scatterSample.f = vec3(p);
                 scatterSample.pdf = p;
+                scatterSample.flags = 0;
             }
 
             float misWeight = 1.0;
             if(light.area > 0.0) // No MIS for distant light
                 misWeight = PowerHeuristic(lightSample.pdf, scatterSample.pdf);
 
-            if (scatterSample.pdf > 0.0)
+            if (scatterSample.pdf > 0.0 && (!isSurface || ClosureSupportsDirection(scatterSample.flags, -r.direction, lightSample.direction)))
                 Ld += misWeight * scatterSample.f * Li / lightSample.pdf;
 #else
             // If there are no volumes in the scene then use a simple binary hit test
@@ -336,13 +359,15 @@ vec3 DirectLight(in Ray r, in State state, bool isSurface)
 
             if (!inShadow)
             {
-                scatterSample.f = DisneyEval(state, -r.direction, state.ffnormal, lightSample.direction, scatterSample.pdf);
+                int closureFlags;
+                scatterSample.f = EvalClosure(state, -r.direction, state.ffnormal, lightSample.direction, scatterSample.pdf, closureFlags);
+                scatterSample.flags = closureFlags;
 
                 float misWeight = 1.0;
                 if(light.area > 0.0) // No MIS for distant light
                     misWeight = PowerHeuristic(lightSample.pdf, scatterSample.pdf);
 
-                if (scatterSample.pdf > 0.0)
+                if (scatterSample.pdf > 0.0 && ClosureSupportsDirection(scatterSample.flags, -r.direction, lightSample.direction))
                     Ld += misWeight * Li * scatterSample.f / lightSample.pdf;
             }
 #endif
@@ -360,6 +385,8 @@ vec4 PathTrace(Ray r)
     State state;
     LightSampleRec lightSample;
     ScatterSampleRec scatterSample;
+    scatterSample.pdf = 0.0;
+    scatterSample.flags = 0;
 
     // FIXME: alpha from material opacity/medium density
     float alpha = 1.0;
@@ -391,9 +418,10 @@ vec4 PathTrace(Ray r)
                 vec4 envMapColPdf = EvalEnvMap(r);
 
                 float misWeight = 1.0;
+                bool hasPrevSurfaceSample = (scatterSample.pdf > 0.0) && ((scatterSample.flags & (CLOSURE_FLAG_REFLECT | CLOSURE_FLAG_TRANSMIT)) != 0);
 
                 // Gather radiance from envmap and use scatterSample.pdf from previous bounce for MIS
-                if (state.depth > 0)
+                if (state.depth > 0 && hasPrevSurfaceSample)
                     misWeight = PowerHeuristic(scatterSample.pdf, envMapColPdf.w);
 
 #if defined(OPT_MEDIUM) && !defined(OPT_VOL_MIS)
@@ -420,8 +448,9 @@ vec4 PathTrace(Ray r)
         if (state.isEmitter)
         {
             float misWeight = 1.0;
+            bool hasPrevSurfaceSample = (scatterSample.pdf > 0.0) && ((scatterSample.flags & (CLOSURE_FLAG_REFLECT | CLOSURE_FLAG_TRANSMIT)) != 0);
 
-            if (state.depth > 0)
+            if (state.depth > 0 && hasPrevSurfaceSample)
                 misWeight = PowerHeuristic(scatterSample.pdf, lightSample.pdf);
 
 #if defined(OPT_MEDIUM) && !defined(OPT_VOL_MIS)
@@ -475,6 +504,7 @@ vec4 PathTrace(Ray r)
                     // Pick a new direction based on the phase function
                     vec3 scatterDir = SampleHG(-r.direction, state.medium.anisotropy, rand(), rand());
                     scatterSample.pdf = PhaseHG(dot(-r.direction, scatterDir), state.medium.anisotropy);
+                    scatterSample.flags = 0;
                     r.direction = scatterDir;
                 }
             }
@@ -491,6 +521,8 @@ vec4 PathTrace(Ray r)
                 (state.mat.alphaMode == ALPHA_MODE_BLEND && rand() > state.mat.opacity))
             {
                 scatterSample.L = r.direction;
+                scatterSample.pdf = 0.0;
+                scatterSample.flags = 0;
                 state.depth--;
             }
             else
@@ -502,7 +534,9 @@ vec4 PathTrace(Ray r)
                 radiance += DirectLight(r, state, true) * throughput;
 
                 // Sample BSDF for color and outgoing direction
-                scatterSample.f = DisneySample(state, -r.direction, state.ffnormal, scatterSample.L, scatterSample.pdf);
+                int closureFlags;
+                scatterSample.f = SampleClosure(state, -r.direction, state.ffnormal, scatterSample.L, scatterSample.pdf, closureFlags);
+                scatterSample.flags = closureFlags;
                 if (scatterSample.pdf > 0.0)
                     throughput *= scatterSample.f / scatterSample.pdf;
                 else

@@ -176,6 +176,7 @@ struct ScatterSampleRec
     vec3 L;
     vec3 f;
     float pdf;
+    int flags;
 };
 
 struct LightSampleRec
@@ -186,6 +187,12 @@ struct LightSampleRec
     float dist;
     float pdf;
 };
+
+// Runtime MaterialX closure contract, configured per material in GetMaterial().
+int gMaterialXClosureContractValid = 0;
+int gMaterialXClosureKind = 0;
+int gMaterialXClosureModel = 0;
+int gMaterialXClosureFlags = 0;
 
 //RNG from code by Moroz Mykhailo (https://www.shadertoy.com/view/wltcRS)
 
