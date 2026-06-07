@@ -284,6 +284,18 @@ if(state.depth > 0)
 
         state.tangent = normalize(mat3(transform) * state.tangent);
         state.bitangent = normalize(mat3(transform) * state.bitangent);
+
+        ApplyGeometricDisplacement(
+            r,
+            state.matID,
+            state.texCoord,
+            state.hitDist,
+            state.fhp,
+            state.normal,
+            state.ffnormal,
+            state.tangent,
+            state.bitangent
+        );
     }
 
     return true;

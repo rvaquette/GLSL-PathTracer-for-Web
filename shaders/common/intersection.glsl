@@ -80,3 +80,53 @@ float AABBIntersect(vec3 minCorner, vec3 maxCorner, Ray r)
 
     return (t1 >= t0) ? (t0 > 0.f ? t0 : t1) : -1.0;
 }
+
+vec3 EvaluateMaterialDisplacementOffset(int matId, vec2 texCoord, vec3 normal, vec3 tangent, vec3 bitangent)
+{
+    int displacementTexID = int(texelFetch1D(materialsTex, matId * MATERIALS_TEX_STRIDE + 17).x);
+    vec3 localDisp = EvalProceduralDisplacementLocal(matId, texCoord, displacementTexID);
+    return tangent * localDisp.x + bitangent * localDisp.y + normal * localDisp.z;
+}
+
+float EvaluateDisplacedHitDistance(Ray r, int matId, float baseHitDist, vec2 texCoord, vec3 normal, vec3 tangent, vec3 bitangent)
+{
+    vec3 displacementOffset = EvaluateMaterialDisplacementOffset(matId, texCoord, normal, tangent, bitangent);
+    if (dot(displacementOffset, displacementOffset) <= 1e-12)
+        return baseHitDist;
+    return baseHitDist + dot(displacementOffset, r.direction);
+}
+
+void ApplyGeometricDisplacement(
+    Ray r,
+    int matId,
+    vec2 texCoord,
+    inout float hitDist,
+    inout vec3 hitPoint,
+    inout vec3 normal,
+    inout vec3 ffnormal,
+    inout vec3 tangent,
+    inout vec3 bitangent)
+{
+    vec3 displacementOffset = EvaluateMaterialDisplacementOffset(matId, texCoord, normal, tangent, bitangent);
+    if (dot(displacementOffset, displacementOffset) <= 1e-12)
+        return;
+
+    hitPoint += displacementOffset;
+    hitDist = max(EPS, hitDist + dot(displacementOffset, r.direction));
+
+    const float kUvStep = 0.001;
+    vec3 displacementOffsetU = EvaluateMaterialDisplacementOffset(matId, texCoord + vec2(kUvStep, 0.0), normal, tangent, bitangent);
+    vec3 displacementOffsetV = EvaluateMaterialDisplacementOffset(matId, texCoord + vec2(0.0, kUvStep), normal, tangent, bitangent);
+
+    vec3 displacedTangent = tangent + (displacementOffsetU - displacementOffset) / kUvStep;
+    vec3 displacedBitangent = bitangent + (displacementOffsetV - displacementOffset) / kUvStep;
+    vec3 displacedNormal = normalize(cross(displacedTangent, displacedBitangent));
+
+    if (dot(displacedNormal, displacedNormal) > 0.0)
+    {
+        normal = displacedNormal;
+        tangent = normalize(displacedTangent - normal * dot(normal, displacedTangent));
+        bitangent = normalize(cross(normal, tangent));
+        ffnormal = dot(normal, r.direction) <= 0.0 ? normal : -normal;
+    }
+}

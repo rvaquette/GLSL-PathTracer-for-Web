@@ -55,7 +55,7 @@ vec2 BinarySearch(float value)
 }
 
 /*__PROCEDURAL_ENV_INJECTION__*/
-#ifndef MATERIALX_RUNTIME_ENV_EVAL
+#ifndef OPT_MATERIALX_ENV_RUNTIME
 vec4 EvalEnvMap(Ray r)
 {
     float theta = acos(clamp(r.direction.y, -1.0, 1.0));

@@ -15,7 +15,7 @@ vec3 randomWalkSSS(State state, vec3 V, vec3 N, vec3 L, out float pdf) {
     Material mat = state.mat;
 
     // Paramètres du medium
-    float sigma_s = mat.medium.density; // scattering coefficient
+    float sigma_s = mat.medium.scattering; // scattering coefficient
     float sigma_a = mat.medium.absorption; // absorption coefficient
     float sigma_t = sigma_s + sigma_a;
     float thickness = mat.medium.thickness;
@@ -53,7 +53,7 @@ vec3 dipoleSSS(State state, vec3 V, vec3 N, vec3 L, out float pdf) {
     Material mat = state.mat;
 
     // Paramètres du medium
-    float sigma_s = mat.medium.density; // scattering coefficient
+    float sigma_s = mat.medium.scattering; // scattering coefficient
     float sigma_a = mat.medium.absorption; // absorption coefficient
     float g = mat.medium.anisotropy;
     float sigma_s_prime = sigma_s * (1.0 - g);

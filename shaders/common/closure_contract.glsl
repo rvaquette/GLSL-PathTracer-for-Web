@@ -308,6 +308,20 @@ vec3 SampleDielectricClosureByModel(State state, vec3 V, vec3 N, int model, out 
     return f;
 }
 
+int ClosureFlagsFromDirection(vec3 V, vec3 L)
+{
+    // Reflection when incoming and outgoing directions are on same hemisphere.
+    return (dot(V, L) >= 0.0) ? CLOSURE_FLAG_REFLECT : CLOSURE_FLAG_TRANSMIT;
+}
+
+bool ClosureSupportsDirection(int flags, vec3 V, vec3 L)
+{
+    int requested = ClosureFlagsFromDirection(V, L);
+    return (flags & requested) != 0;
+}
+
+#ifdef OPT_MATERIALX_RUNTIME
+
 void ComputeMaterialXLobeWeights(State state, out float wDiffuse, out float wConductor, out float wDielectric)
 {
     float baseW = clamp(state.mat.baseWeight, 0.0, 1.0);
@@ -449,15 +463,15 @@ vec3 EvalMediumPhaseApprox(State state, vec3 N, vec3 L, out float pdf)
     float cosTheta = clamp(dot(N, L), -1.0, 1.0);
     float phase = (1.0 - g * g) / (4.0 * PI * pow(max(1.0 + g * g - 2.0 * g * cosTheta, 1e-4), 1.5));
 
-    float density = max(m.medium.density, 0.0);
-    float absorption = max(m.medium.absorption, 0.0);
+    float sigma_s = max(m.medium.scattering, 0.0);
+    float sigma_a = max(m.medium.absorption, 0.0);
+    float sigma_t = sigma_s + sigma_a;
     float thickness = max(m.medium.thickness, 1e-3);
-    float sigmaT = density + absorption;
-    float transmittance = exp(-sigmaT * thickness);
+    float transmittance = exp(-sigma_t * thickness);
     vec3 mediumColor = max(m.medium.color, vec3(0.0));
 
     pdf = max(phase, 1e-4);
-    return mediumColor * density * transmittance * phase;
+    return mediumColor * sigma_s * transmittance * phase;
 }
 
 vec3 EvalSubsurfaceClosure(State state, vec3 V, vec3 N, vec3 L, out float pdf, out int flags)
@@ -527,18 +541,6 @@ vec3 SampleVolumeClosure(State state, vec3 V, vec3 N, out vec3 L, out float pdf,
         return vec3(0.0);
     }
     return f;
-}
-
-int ClosureFlagsFromDirection(vec3 V, vec3 L)
-{
-    // Reflection when incoming and outgoing directions are on same hemisphere.
-    return (dot(V, L) >= 0.0) ? CLOSURE_FLAG_REFLECT : CLOSURE_FLAG_TRANSMIT;
-}
-
-bool ClosureSupportsDirection(int flags, vec3 V, vec3 L)
-{
-    int requested = ClosureFlagsFromDirection(V, L);
-    return (flags & requested) != 0;
 }
 
 bool HasRuntimeMaterialXClosureContract()
@@ -658,12 +660,17 @@ vec3 SampleRuntimeMaterialXClosure(State state, vec3 V, vec3 N, out vec3 L, out 
     return f;
 }
 
+#endif // OPT_MATERIALX_RUNTIME
+
 vec3 EvalClosure(State state, vec3 V, vec3 N, vec3 L, out float pdf, out int flags)
 {
+#ifdef OPT_MATERIALX_RUNTIME
     if (HasRuntimeMaterialXClosureContract())
         return EvalRuntimeMaterialXClosure(state, V, N, L, pdf, flags);
+#endif
 
     vec3 f;
+#if 0
     if (IsMostlyDiffuseMaterial(state))
     {
         int model = SelectDiffuseClosureModel(state);
@@ -680,6 +687,7 @@ vec3 EvalClosure(State state, vec3 V, vec3 N, vec3 L, out float pdf, out int fla
         f = EvalDielectricClosureByModel(state, V, N, L, model, pdf);
     }
     else
+#endif
     {
         f = DisneyEval(state, V, N, L, pdf);
     }
@@ -700,10 +708,13 @@ vec3 EvalClosure(State state, vec3 V, vec3 N, vec3 L, out float pdf, out int fla
 
 vec3 SampleClosure(State state, vec3 V, vec3 N, out vec3 L, out float pdf, out int flags)
 {
+#ifdef OPT_MATERIALX_RUNTIME
     if (HasRuntimeMaterialXClosureContract())
         return SampleRuntimeMaterialXClosure(state, V, N, L, pdf, flags);
+#endif
 
     vec3 f;
+#if 0
     if (IsMostlyDiffuseMaterial(state))
     {
         int model = SelectDiffuseClosureModel(state);
@@ -720,6 +731,7 @@ vec3 SampleClosure(State state, vec3 V, vec3 N, out vec3 L, out float pdf, out i
         f = SampleDielectricClosureByModel(state, V, N, model, L, pdf);
     }
     else
+#endif
     {
         f = DisneySample(state, V, N, L, pdf);
     }

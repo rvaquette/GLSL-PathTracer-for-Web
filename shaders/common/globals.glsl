@@ -40,7 +40,7 @@
 #define ALPHA_MODE_BLEND 1
 #define ALPHA_MODE_MASK 2
 
-#define MATERIALS_TEX_STRIDE 17
+#define MATERIALS_TEX_STRIDE 18
 
 #define MEDIUM_NONE 0
 #define MEDIUM_ABSORB 1
@@ -60,7 +60,7 @@ struct Ray
 struct Medium
 {
     int type;
-    float density;
+    float scattering;
     float absorption;
     vec3 color;
     float anisotropy;
@@ -193,6 +193,8 @@ int gMaterialXClosureContractValid = 0;
 int gMaterialXClosureKind = 0;
 int gMaterialXClosureModel = 0;
 int gMaterialXClosureFlags = 0;
+
+/*__PROCEDURAL_GEOMETRY_INJECTION__*/
 
 //RNG from code by Moroz Mykhailo (https://www.shadertoy.com/view/wltcRS)
 

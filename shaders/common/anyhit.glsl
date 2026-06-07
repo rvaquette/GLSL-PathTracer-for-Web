@@ -80,10 +80,9 @@ bool AnyHit(Ray r, float maxDist)
     float leftHit = 0.0;
     float rightHit = 0.0;
 
-#if defined(OPT_ALPHA_TEST) && !defined(OPT_MEDIUM)
     int currMatID = 0;
-#endif
     bool BLAS = false;
+    mat4 transMat = mat4(1.0);
 
     Ray rTrans;
     rTrans.origin = r.origin;
@@ -126,13 +125,30 @@ bool AnyHit(Ray r, float maxDist)
 
                 if (all(greaterThanEqual(uvt, vec4(0.0))) && uvt.z < maxDist)
                 {
-#if defined(OPT_ALPHA_TEST) && !defined(OPT_MEDIUM)
-                    vec2 t0 = vec2(v0.w, texelFetch(normalsTex, vertIndices.x).w);
-                    vec2 t1 = vec2(v1.w, texelFetch(normalsTex, vertIndices.y).w);
-                    vec2 t2 = vec2(v2.w, texelFetch(normalsTex, vertIndices.z).w);
+                    vec4 n0 = texelFetch(normalsTex, vertIndices.x);
+                    vec4 n1 = texelFetch(normalsTex, vertIndices.y);
+                    vec4 n2 = texelFetch(normalsTex, vertIndices.z);
+
+                    vec2 t0 = vec2(v0.w, n0.w);
+                    vec2 t1 = vec2(v1.w, n1.w);
+                    vec2 t2 = vec2(v2.w, n2.w);
 
                     vec2 texCoord = t0 * uvt.w + t1 * uvt.x + t2 * uvt.y;
+                    vec3 normal = normalize(n0.xyz * uvt.w + n1.xyz * uvt.x + n2.xyz * uvt.y);
+                    normal = normalize(transpose(inverse(mat3(transMat))) * normal);
 
+                    vec3 deltaPos1 = v1.xyz - v0.xyz;
+                    vec3 deltaPos2 = v2.xyz - v0.xyz;
+                    vec2 deltaUV1 = t1 - t0;
+                    vec2 deltaUV2 = t2 - t0;
+                    float invdet = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x);
+                    vec3 tangent = normalize(mat3(transMat) * ((deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * invdet));
+                    vec3 bitangent = normalize(mat3(transMat) * ((deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * invdet));
+                    float displacedDist = EvaluateDisplacedHitDistance(r, currMatID, uvt.z, texCoord, normal, tangent, bitangent);
+                    if (displacedDist <= EPS || displacedDist >= maxDist)
+                        continue;
+
+#if defined(OPT_ALPHA_TEST) && !defined(OPT_MEDIUM)
                     vec4 texIDs      = texelFetch1D(materialsTex, currMatID * MATERIALS_TEX_STRIDE + 6);
                     vec4 alphaParams = texelFetch1D(materialsTex, currMatID * MATERIALS_TEX_STRIDE + 7);
                     vec2 uvScale     = max(texelFetch1D(materialsTex, currMatID * MATERIALS_TEX_STRIDE + 15).xy, vec2(0.001));
@@ -163,6 +179,7 @@ bool AnyHit(Ray r, float maxDist)
             vec4 r4 = texelFetch1D(transformsTex, (-leaf - 1) * 4 + 3).xyzw;
 
             mat4 transform = mat4(r1, r2, r3, r4);
+            transMat = transform;
 
             rTrans.origin    = vec3(inverse(transform) * vec4(r.origin, 1.0));
             rTrans.direction = vec3(inverse(transform) * vec4(r.direction, 0.0));
@@ -172,9 +189,7 @@ bool AnyHit(Ray r, float maxDist)
 
             index = leftIndex;
             BLAS = true;
-#if defined(OPT_ALPHA_TEST) && !defined(OPT_MEDIUM)
             currMatID = rightIndex;
-#endif
             continue_ = true;
         }
         else

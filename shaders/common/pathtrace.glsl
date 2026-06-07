@@ -23,8 +23,6 @@
  */
 
 /*__PROCEDURAL_MATERIAL_INJECTION__*/
-void ApplyProceduralMaterialOverrides(int matId, inout Material mat, inout State state, ivec4 texIDs, Ray r) {}
-void ApplyProceduralMaterialClosureContract(int matId, in Material mat, in State state) {}
 
 void GetMaterial(inout State state, in Ray r)
 {
@@ -70,7 +68,7 @@ void GetMaterial(inout State state, in Ray r)
     mat.specTrans          = clamp(param5.x, 0.0, 1.0);
     mat.ior                = max(param5.y, 1.0);
     mat.medium.type        = int(param5.z);
-    mat.medium.density     = max(param5.w, 0.0);
+    mat.medium.scattering  = max(param5.w, 0.0);
 
     mat.medium.color       = clamp(param6.rgb, vec3(0.0), vec3(1.0));
     // OpenPBR parity: support near-full HG anisotropy range while avoiding singularities at |g|=1.
@@ -225,7 +223,8 @@ vec3 EvalTransmittance(Ray r)
         if (dot(r.direction, state.normal) > 0. && state.mat.medium.type != MEDIUM_NONE)
         {
             vec3 color = state.mat.medium.type == MEDIUM_ABSORB ? vec3(1.0) - state.mat.medium.color : vec3(1.0);
-            transmittance *= exp(-color * state.mat.medium.density * state.hitDist);
+            float sigma_t_ev = state.mat.medium.scattering + state.mat.medium.absorption;
+            transmittance *= exp(-color * sigma_t_ev * state.hitDist);
         }
 
         // Move ray origin to hit point
@@ -478,16 +477,19 @@ vec4 PathTrace(Ray r)
         {
             if(state.medium.type == MEDIUM_ABSORB)
             {
-                throughput *= exp(-(1.0 - state.medium.color) * state.hitDist * state.medium.density);
+                float sigma_t_abs = state.medium.scattering + state.medium.absorption;
+                throughput *= exp(-(1.0 - state.medium.color) * state.hitDist * sigma_t_abs);
             }
             else if(state.medium.type == MEDIUM_EMISSIVE)
             {
-                radiance += state.medium.color * state.hitDist * state.medium.density * throughput;
+                float sigma_t_em = state.medium.scattering + state.medium.absorption;
+                radiance += state.medium.color * state.hitDist * sigma_t_em * throughput;
             }
             else
             {
                 // Sample a distance in the medium
-                float scatterDist = min(-log(rand()) / state.medium.density, state.hitDist);
+                float sigma_t_sc = state.medium.scattering + state.medium.absorption;
+                float scatterDist = min(-log(rand()) / sigma_t_sc, state.hitDist);
                 mediumSampled = scatterDist < state.hitDist;
 
                 if (mediumSampled)
