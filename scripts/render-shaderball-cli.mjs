@@ -303,6 +303,33 @@ async function waitForSppProgress(page, targetSpp, maxWaitMs) {
   return reachedTargetSpp;
 }
 
+async function waitForDenoiser(page, maxWaitMs) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWaitMs) {
+    const denoiserState = await page.evaluate(() => {
+      const renderer = window.__cliMain?.renderer;
+      return {
+        hasRenderer: Boolean(renderer),
+        denoiserExecutedOneTime: Boolean(renderer?.denoiserExecutedOneTime),
+        enableDenoiser: Boolean(window.__cliMain?.currentScene?.renderOptions?.enableDenoiser)
+      };
+    });
+
+    if (!denoiserState.hasRenderer || !denoiserState.enableDenoiser) {
+      return false;
+    }
+
+    if (denoiserState.denoiserExecutedOneTime) {
+      return true;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  return false;
+}
+
 async function evaluateWithNodeTimeout(page, fn, args, timeoutMs, timeoutMessage) {
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
@@ -389,6 +416,13 @@ async function main() {
         throw new Error("Scene was not initialized");
       }
 
+      const camera = currentScene.camera;
+      if (camera) {
+        const targetRadius = Math.max(0.25, camera.radius * 0.65);
+        camera.setRadius(targetRadius - camera.radius);
+        camera.focalDist = Math.max(0.1, targetRadius);
+      }
+
       if (materialxUrl) {
         const { doc, mtlxDir } = await MtlxLoader.fetchAndExpand(materialxUrl);
         const parsedSurfaceMaterial = MtlxLoader.parseFromDoc(doc);
@@ -421,6 +455,8 @@ async function main() {
 
       await currentScene.addEnvMapAsync(`HDR/${envmap}`);
       currentScene.renderOptions.enableEnvMap = true;
+      currentScene.renderOptions.enableDenoiser = true;
+      currentScene.renderOptions.denoiserFrameCnt = 1;
       currentScene.renderOptions.maxSpp = spp;
       currentScene.renderOptions.renderResolution = { x: width, y: height };
       currentScene.renderOptions.tileWidth = width / 8;
@@ -446,13 +482,19 @@ async function main() {
       console.warn(`[render-cli] SPP target not reached within ${args.maxWaitMs}ms. Capturing current frame.`);
     }
 
+    const denoiserReady = await waitForDenoiser(page, Math.min(args.maxWaitMs, 10000));
+    if (!denoiserReady) {
+      console.warn("[render-cli] Denoiser did not complete before capture.");
+    }
+
     const renderState = await page.evaluate(() => {
       const main = window.__cliMain;
       const renderer = main?.renderer;
       return {
         hasRenderer: Boolean(renderer),
         sampleCounter: renderer?.sampleCounter ?? -1,
-        targetSpp: window.__cliTargetSpp ?? -1
+        targetSpp: window.__cliTargetSpp ?? -1,
+        denoiserExecutedOneTime: Boolean(renderer?.denoiserExecutedOneTime)
       };
     });
 
@@ -476,7 +518,7 @@ async function main() {
       });
     }
 
-    console.log(`Render complete: ${args.output} (spp=${renderState.sampleCounter}, target=${renderState.targetSpp})`);
+    console.log(`Render complete: ${args.output} (spp=${renderState.sampleCounter}, target=${renderState.targetSpp}, denoiser=${renderState.denoiserExecutedOneTime ? "on" : "pending"})`);
   } finally {
     await browser.close();
     await new Promise((resolve) => server.close(() => resolve()));
