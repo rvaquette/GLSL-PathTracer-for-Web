@@ -9,8 +9,8 @@
             "program": "${workspaceFolder}/scripts/render-shaderball-cli.mjs",
             "request": "launch",
             "args": [
-                "--scene",
-                "absval/absval.mtlx"
+                "--materialx",
+                "nodes/absval/absval.mtlx"
             ],
             "type": "node"
         },
