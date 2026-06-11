@@ -1,0 +1,3 @@
+[submodule "scenes"]
+	path = scenes
+	url = https://github.com/rvaquette/GLSL-PathTracer-scenes.git

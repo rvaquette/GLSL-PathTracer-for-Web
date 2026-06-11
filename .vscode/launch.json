@@ -5,6 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Launch Program",
+            "program": "${workspaceFolder}/scripts/render-shaderball-cli.mjs",
+            "request": "launch",
+            "args": [
+                "--materialx",
+                "nodes/absval/absval.mtlx"
+            ],
+            "type": "node"
+        },
+        {
             "type": "chrome",
             "name": "index.html",
             "request": "launch",
