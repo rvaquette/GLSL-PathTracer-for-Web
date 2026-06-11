@@ -2,32 +2,6 @@
 // Provides a single closure entry point for path tracing while preserving
 // the current Disney/OpenPBR implementation underneath.
 
-#define CLOSURE_FLAG_REFLECT 1
-#define CLOSURE_FLAG_TRANSMIT 2
-#define CLOSURE_FLAG_EMISSIVE 4
-
-#define D4_DIFFUSE_LAMBERT 0
-#define D4_DIFFUSE_OREN_NAYAR 1
-#define D4_DIFFUSE_BURLEY 2
-
-#define D4_CONDUCTOR_BRDF 0
-#define D4_CONDUCTOR_BSDF 1
-
-#define D4_DIELECTRIC_BRDF 0
-#define D4_DIELECTRIC_BSDF 1
-#define D4_DIELECTRIC_BTDF 2
-
-#define D4_EDF_UNIFORM 0
-#define D4_EDF_GENERALIZED_SCHLICK 1
-
-#define D4_CLOSURE_KIND_DIFFUSE 0
-#define D4_CLOSURE_KIND_CONDUCTOR 1
-#define D4_CLOSURE_KIND_DIELECTRIC 2
-#define D4_CLOSURE_KIND_HAIR 3
-#define D4_CLOSURE_KIND_GENERIC 4
-#define D4_CLOSURE_KIND_SUBSURFACE 5
-#define D4_CLOSURE_KIND_VOLUME 6
-
 int SelectDiffuseClosureModel(State state)
 {
     float r = clamp(state.mat.baseDiffuseRoughness, 0.0, 1.0);
@@ -554,6 +528,7 @@ vec3 EvalRuntimeMaterialXClosure(State state, vec3 V, vec3 N, vec3 L, out float 
     int model = max(gMaterialXClosureModel, 0);
     flags = gMaterialXClosureFlags;
 
+#if D4_ENABLE_CLOSURE_GENERIC
     if (kind == D4_CLOSURE_KIND_GENERIC)
     {
         vec3 f = EvalCompositeMaterialXClosure(state, V, N, L, pdf, flags);
@@ -561,6 +536,8 @@ vec3 EvalRuntimeMaterialXClosure(State state, vec3 V, vec3 N, vec3 L, out float 
             flags = gMaterialXClosureFlags;
         return f;
     }
+#endif
+#if D4_ENABLE_CLOSURE_HAIR
     if (kind == D4_CLOSURE_KIND_HAIR)
     {
         vec3 f = EvalHairClosure(state, V, N, L, pdf, flags);
@@ -568,6 +545,8 @@ vec3 EvalRuntimeMaterialXClosure(State state, vec3 V, vec3 N, vec3 L, out float 
             flags = gMaterialXClosureFlags;
         return f;
     }
+#endif
+#if D4_ENABLE_CLOSURE_SUBSURFACE
     if (kind == D4_CLOSURE_KIND_SUBSURFACE)
     {
         vec3 f = EvalSubsurfaceClosure(state, V, N, L, pdf, flags);
@@ -575,6 +554,8 @@ vec3 EvalRuntimeMaterialXClosure(State state, vec3 V, vec3 N, vec3 L, out float 
             flags = gMaterialXClosureFlags;
         return f;
     }
+#endif
+#if D4_ENABLE_CLOSURE_VOLUME
     if (kind == D4_CLOSURE_KIND_VOLUME)
     {
         vec3 f = EvalVolumeClosure(state, V, N, L, pdf, flags);
@@ -582,6 +563,7 @@ vec3 EvalRuntimeMaterialXClosure(State state, vec3 V, vec3 N, vec3 L, out float 
             flags = gMaterialXClosureFlags;
         return f;
     }
+#endif
 
     if ((flags & (CLOSURE_FLAG_REFLECT | CLOSURE_FLAG_TRANSMIT)) == 0)
         flags |= ClosureFlagsFromDirection(V, L);
@@ -592,12 +574,18 @@ vec3 EvalRuntimeMaterialXClosure(State state, vec3 V, vec3 N, vec3 L, out float 
         return vec3(0.0);
     }
 
+#if D4_ENABLE_CLOSURE_DIFFUSE
     if (kind == D4_CLOSURE_KIND_DIFFUSE)
         return EvalDiffuseClosureByModel(state, V, N, L, model, pdf);
+#endif
+#if D4_ENABLE_CLOSURE_CONDUCTOR
     if (kind == D4_CLOSURE_KIND_CONDUCTOR)
         return EvalConductorClosureByModel(state, V, N, L, model, pdf);
+#endif
+#if D4_ENABLE_CLOSURE_DIELECTRIC
     if (kind == D4_CLOSURE_KIND_DIELECTRIC)
         return EvalDielectricClosureByModel(state, V, N, L, model, pdf);
+#endif
 
     return DisneyEval(state, V, N, L, pdf);
 }
@@ -608,6 +596,7 @@ vec3 SampleRuntimeMaterialXClosure(State state, vec3 V, vec3 N, out vec3 L, out 
     int model = max(gMaterialXClosureModel, 0);
     flags = gMaterialXClosureFlags;
 
+#if D4_ENABLE_CLOSURE_GENERIC
     if (kind == D4_CLOSURE_KIND_GENERIC)
     {
         vec3 f = SampleCompositeMaterialXClosure(state, V, N, L, pdf, flags);
@@ -615,6 +604,8 @@ vec3 SampleRuntimeMaterialXClosure(State state, vec3 V, vec3 N, out vec3 L, out 
             flags = gMaterialXClosureFlags;
         return f;
     }
+#endif
+#if D4_ENABLE_CLOSURE_HAIR
     if (kind == D4_CLOSURE_KIND_HAIR)
     {
         vec3 f = SampleHairClosure(state, V, N, L, pdf, flags);
@@ -622,6 +613,8 @@ vec3 SampleRuntimeMaterialXClosure(State state, vec3 V, vec3 N, out vec3 L, out 
             flags = gMaterialXClosureFlags;
         return f;
     }
+#endif
+#if D4_ENABLE_CLOSURE_SUBSURFACE
     if (kind == D4_CLOSURE_KIND_SUBSURFACE)
     {
         vec3 f = SampleSubsurfaceClosure(state, V, N, L, pdf, flags);
@@ -629,6 +622,8 @@ vec3 SampleRuntimeMaterialXClosure(State state, vec3 V, vec3 N, out vec3 L, out 
             flags = gMaterialXClosureFlags;
         return f;
     }
+#endif
+#if D4_ENABLE_CLOSURE_VOLUME
     if (kind == D4_CLOSURE_KIND_VOLUME)
     {
         vec3 f = SampleVolumeClosure(state, V, N, L, pdf, flags);
@@ -636,15 +631,24 @@ vec3 SampleRuntimeMaterialXClosure(State state, vec3 V, vec3 N, out vec3 L, out 
             flags = gMaterialXClosureFlags;
         return f;
     }
+#endif
 
     vec3 f;
+#if D4_ENABLE_CLOSURE_DIFFUSE
     if (kind == D4_CLOSURE_KIND_DIFFUSE)
         f = SampleDiffuseClosureByModel(state, V, N, model, L, pdf);
-    else if (kind == D4_CLOSURE_KIND_CONDUCTOR)
+    else
+#endif
+#if D4_ENABLE_CLOSURE_CONDUCTOR
+    if (kind == D4_CLOSURE_KIND_CONDUCTOR)
         f = SampleConductorClosureByModel(state, V, N, model, L, pdf);
-    else if (kind == D4_CLOSURE_KIND_DIELECTRIC)
+    else
+#endif
+#if D4_ENABLE_CLOSURE_DIELECTRIC
+    if (kind == D4_CLOSURE_KIND_DIELECTRIC)
         f = SampleDielectricClosureByModel(state, V, N, model, L, pdf);
     else
+#endif
         f = DisneySample(state, V, N, L, pdf);
 
     int dirFlag = ClosureFlagsFromDirection(V, L);
@@ -669,28 +673,7 @@ vec3 EvalClosure(State state, vec3 V, vec3 N, vec3 L, out float pdf, out int fla
         return EvalRuntimeMaterialXClosure(state, V, N, L, pdf, flags);
 #endif
 
-    vec3 f;
-#if 0
-    if (IsMostlyDiffuseMaterial(state))
-    {
-        int model = SelectDiffuseClosureModel(state);
-        f = EvalDiffuseClosureByModel(state, V, N, L, model, pdf);
-    }
-    else if (IsMostlyConductorMaterial(state))
-    {
-        int model = SelectConductorClosureModel(state);
-        f = EvalConductorClosureByModel(state, V, N, L, model, pdf);
-    }
-    else if (IsMostlyDielectricMaterial(state))
-    {
-        int model = SelectDielectricClosureModel(state);
-        f = EvalDielectricClosureByModel(state, V, N, L, model, pdf);
-    }
-    else
-#endif
-    {
-        f = DisneyEval(state, V, N, L, pdf);
-    }
+    vec3 f = DisneyEval(state, V, N, L, pdf);
     flags = ClosureFlagsFromDirection(V, L);
     if (HasEdfClosure(state))
     {
@@ -713,28 +696,7 @@ vec3 SampleClosure(State state, vec3 V, vec3 N, out vec3 L, out float pdf, out i
         return SampleRuntimeMaterialXClosure(state, V, N, L, pdf, flags);
 #endif
 
-    vec3 f;
-#if 0
-    if (IsMostlyDiffuseMaterial(state))
-    {
-        int model = SelectDiffuseClosureModel(state);
-        f = SampleDiffuseClosureByModel(state, V, N, model, L, pdf);
-    }
-    else if (IsMostlyConductorMaterial(state))
-    {
-        int model = SelectConductorClosureModel(state);
-        f = SampleConductorClosureByModel(state, V, N, model, L, pdf);
-    }
-    else if (IsMostlyDielectricMaterial(state))
-    {
-        int model = SelectDielectricClosureModel(state);
-        f = SampleDielectricClosureByModel(state, V, N, model, L, pdf);
-    }
-    else
-#endif
-    {
-        f = DisneySample(state, V, N, L, pdf);
-    }
+    vec3 f = DisneySample(state, V, N, L, pdf);
     flags = ClosureFlagsFromDirection(V, L);
     if (HasEdfClosure(state))
     {

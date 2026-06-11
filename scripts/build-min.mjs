@@ -34,7 +34,7 @@ async function main() {
   await build({
     entryPoints: {
       runStatic: "src/runStatic.ts",
-      convert: "src/convert.ts"
+      "render-shaderball-cli": "src/render-shaderball-cli.ts"
     },
     outdir,
     bundle: true,
@@ -43,7 +43,10 @@ async function main() {
     target: ["node20"],
     minify: true,
     sourcemap: false,
-    packages: "external"
+    packages: "external",
+    // The dynamic imports of /dist/*.js inside page.evaluate() are browser-side
+    // URLs resolved at runtime by Playwright — esbuild must not try to bundle them.
+    external: ["/dist/*"]
   });
 
   console.log("Minified build written to dist-min");
