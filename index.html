@@ -453,8 +453,7 @@
 
         const config = {
           document: document,
-          canvas: canvas,
-          scene: 'materialx-regression.scene'
+          canvas: canvas
         };
 
         if (typeof window.updateSceneStageIndicator === 'function') {
@@ -570,8 +569,8 @@
     </script>
 
     <script type="module">
-      import { Main } from './dist/main.js';
-      import { GL } from './dist/core/GL.js';
+      import { Main } from './dist-min/main.js';
+      import { GL } from './dist-min/core/GL.js';
 
       window.loadSceneAsync = async function(config) {
         await Main.instance.runAsync(config);

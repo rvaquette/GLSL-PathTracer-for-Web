@@ -9,7 +9,8 @@ async function main() {
   await build({
     entryPoints: {
       main: "src/main.ts",
-      "core/GL": "src/core/GL.ts"
+      "core/GL": "src/core/GL.ts",
+      "browser-cli-exports": "src/browser-cli-exports.ts"
     },
     outdir,
     bundle: true,
@@ -44,9 +45,9 @@ async function main() {
     minify: true,
     sourcemap: false,
     packages: "external",
-    // The dynamic imports of /dist/*.js inside page.evaluate() are browser-side
+    // The dynamic imports of /dist-min/*.js inside page.evaluate() are browser-side
     // URLs resolved at runtime by Playwright — esbuild must not try to bundle them.
-    external: ["/dist/*"]
+    external: ["/dist-min/*"]
   });
 
   console.log("Minified build written to dist-min");
