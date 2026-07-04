@@ -36,7 +36,7 @@ in vec2 TexCoords;
 #include common/anyhit.glsl
 #include common/closest_hit.glsl
 #include common/disney.glsl
-#include common/closure_contract.glsl
+#include common/mtlx_closure.glsl
 #include common/lambert.glsl
 #include common/pathtrace.glsl
 

@@ -1,1 +1,1 @@
-import{a,b as r,c as o}from"./chunks/chunk-KKG2O67I.js";import"./chunks/chunk-Q4WHUCDY.js";import"./chunks/chunk-ANN5UYCF.js";export{o as Controls,r as applyMaterialXProceduralRuntime,a as loadMaterialXRuntimeData};
+import{a as o}from"./chunks/chunk-IRXEJXSA.js";import"./chunks/chunk-Q4WHUCDY.js";import"./chunks/chunk-ANN5UYCF.js";export{o as Controls};

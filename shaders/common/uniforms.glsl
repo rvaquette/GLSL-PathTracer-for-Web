@@ -40,7 +40,6 @@ uniform samplerArrayBuffer textureMapsArrayTex;
 
 uniform sampler2D envMapTex;
 uniform sampler2D envMapCDFTex;
-uniform sampler2D thinFilmLutTex;
 
 uniform vec2 envMapRes;
 uniform float envMapTotalSum;

@@ -235,57 +235,6 @@ void SampleDistantLight(in Light light, in vec3 scatterPos, inout LightSampleRec
     lightSample.pdf = 1.0;
 }
 
-// Point light (delta light, no geometry).
-// light.radius repurposed as decay_rate: 0=constant, 1=linear, 2=quadratic, 3=cubic.
-void SamplePointLight(in Light light, in vec3 scatterPos, inout LightSampleRec lightSample)
-{
-    vec3 toLight = light.position - scatterPos;
-    float dist = length(toLight);
-    lightSample.direction = toLight / max(dist, 1e-6);
-    lightSample.normal    = -lightSample.direction;
-    lightSample.dist      = dist;
-    lightSample.pdf       = 1.0;
-
-    float decay = light.radius; // 0/1/2/3
-    float atten;
-    if (decay < 0.5)      atten = 1.0;
-    else if (decay < 1.5) atten = 1.0 / max(dist, 1e-4);
-    else if (decay < 2.5) atten = 1.0 / max(dist * dist, 1e-8);
-    else                  atten = 1.0 / max(dist * dist * dist, 1e-12);
-
-    lightSample.emission = light.emission * atten * float(numOfLights);
-}
-
-// Spot light (delta light, no geometry).
-// light.u = normalised spot direction (points away from source, toward scene).
-// light.v.x = cos(inner_half_angle), light.v.y = cos(outer_half_angle).
-// light.radius = decay_rate (same as PointLight).
-void SampleSpotLight(in Light light, in vec3 scatterPos, inout LightSampleRec lightSample)
-{
-    vec3 toLight = light.position - scatterPos;
-    float dist = length(toLight);
-    lightSample.direction = toLight / max(dist, 1e-6);
-    lightSample.normal    = -lightSample.direction;
-    lightSample.dist      = dist;
-    lightSample.pdf       = 1.0;
-
-    float decay = light.radius;
-    float atten;
-    if (decay < 0.5)      atten = 1.0;
-    else if (decay < 1.5) atten = 1.0 / max(dist, 1e-4);
-    else if (decay < 2.5) atten = 1.0 / max(dist * dist, 1e-8);
-    else                  atten = 1.0 / max(dist * dist * dist, 1e-12);
-
-    // Cone falloff: lightSample.direction goes FROM surface TO light;
-    // light.u is the spot direction (FROM light TOWARD scene), so we negate direction.
-    float cosTheta  = dot(-lightSample.direction, light.u);
-    float cosInner  = light.v.x;
-    float cosOuter  = light.v.y;
-    float spotFactor = smoothstep(cosOuter, cosInner, cosTheta);
-
-    lightSample.emission = light.emission * atten * spotFactor * float(numOfLights);
-}
-
 void SampleOneLight(in Light light, in vec3 scatterPos, inout LightSampleRec lightSample)
 {
     int type = int(light.type);
@@ -294,10 +243,6 @@ void SampleOneLight(in Light light, in vec3 scatterPos, inout LightSampleRec lig
         SampleRectLight(light, scatterPos, lightSample);
     else if (type == SPHERE_LIGHT)
         SampleSphereLight(light, scatterPos, lightSample);
-    else if (type == POINT_LIGHT)
-        SamplePointLight(light, scatterPos, lightSample);
-    else if (type == SPOT_LIGHT)
-        SampleSpotLight(light, scatterPos, lightSample);
     else
         SampleDistantLight(light, scatterPos, lightSample);
 }

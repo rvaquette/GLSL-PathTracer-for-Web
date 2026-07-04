@@ -1,3 +1,7 @@
+// NOTE: Kept available even under OPT_MATERIALX (mixed scenes). Sentinel guard
+// never defined (was: #ifndef OPT_MATERIALX).
+#ifndef OPT_DISABLE_BUILTIN_BSDF
+
 /*
  * MIT License
  *
@@ -44,3 +48,5 @@ vec3 LambertEval(State state, vec3 V, vec3 N, vec3 L, inout float pdf)
 
     return (1.0 / PI) * state.mat.baseColor * dot(N, L);
 }
+
+#endif

@@ -33,49 +33,34 @@
 #define QUAD_LIGHT 0
 #define SPHERE_LIGHT 1
 #define DISTANT_LIGHT 2
-#define POINT_LIGHT 3
-#define SPOT_LIGHT 4
 
 #define ALPHA_MODE_OPAQUE 0
 #define ALPHA_MODE_BLEND 1
 #define ALPHA_MODE_MASK 2
 
-#define MATERIALS_TEX_STRIDE 18
+// MaterialX closure direction flags (mirror src/core/proceduralMaterial.ts).
+#define CLOSURE_FLAG_REFLECT  1
+#define CLOSURE_FLAG_TRANSMIT 2
+#define CLOSURE_FLAG_EMISSIVE 4
+
+// Material shading model discriminator (mirror src/core/material.ts MaterialType).
+#define MATERIAL_TYPE_DISNEY    0
+#define MATERIAL_TYPE_MATERIALX 1
+
+// Number of vec4 in a material record's common block (shared by all types).
+// The MaterialX per-material parameter payload (when present) follows this block.
+#define MAT_COMMON_VEC4 8
+
+// vec4 stride between consecutive materials in materialsTex. Injected per scene
+// (= largest material record). Falls back to the common-block size when not set.
+#ifndef MATERIALS_TEX_STRIDE
+#define MATERIALS_TEX_STRIDE 8
+#endif
 
 #define MEDIUM_NONE 0
 #define MEDIUM_ABSORB 1
 #define MEDIUM_SCATTER 2
 #define MEDIUM_EMISSIVE 3
-
-// Material type discriminator (stored in param17.w)
-#define MATERIAL_TYPE_DISNEY 0
-#define MATERIAL_TYPE_HAIR   1
-
-#define CLOSURE_FLAG_REFLECT 1
-#define CLOSURE_FLAG_TRANSMIT 2
-#define CLOSURE_FLAG_EMISSIVE 4
-
-#define D4_DIFFUSE_LAMBERT 0
-#define D4_DIFFUSE_OREN_NAYAR 1
-#define D4_DIFFUSE_BURLEY 2
-
-#define D4_CONDUCTOR_BRDF 0
-#define D4_CONDUCTOR_BSDF 1
-
-#define D4_DIELECTRIC_BRDF 0
-#define D4_DIELECTRIC_BSDF 1
-#define D4_DIELECTRIC_BTDF 2
-
-#define D4_EDF_UNIFORM 0
-#define D4_EDF_GENERALIZED_SCHLICK 1
-
-#define D4_CLOSURE_KIND_DIFFUSE 0
-#define D4_CLOSURE_KIND_CONDUCTOR 1
-#define D4_CLOSURE_KIND_DIELECTRIC 2
-#define D4_CLOSURE_KIND_HAIR 3
-#define D4_CLOSURE_KIND_GENERIC 4
-#define D4_CLOSURE_KIND_SUBSURFACE 5
-#define D4_CLOSURE_KIND_VOLUME 6
 
 struct Ray
 {
@@ -86,67 +71,33 @@ struct Ray
 struct Medium
 {
     int type;
-    float scattering;
-    float absorption;
+    float density;
     vec3 color;
     float anisotropy;
-    float thickness; // SSS thickness (en unités de la scène)
 };
 
 struct Material
 {
-    float baseWeight;
-    float baseDiffuseRoughness;
     vec3 baseColor;
-    vec3 specularColor;
-    vec3 coatColor;
     float opacity;
     int alphaMode;
     float alphaCutoff;
+    int materialType;
     vec3 emission;
     float anisotropic;
     float metallic;
     float roughness;
+    float subsurface;
     float specularTint;
     float sheen;
     float sheenTint;
     float clearcoat;
     float clearcoatRoughness;
-    float coatIOR;
-    float coatRoughnessAnisotropy;
-    float coatDarkening;
     float specTrans;
     float ior;
     float ax;
     float ay;
-    float coatAx;
-    float coatAy;
-    float doubleSided;
     Medium medium;
-    vec3 transmissionColor;
-    float thinWalled;
-    float subsurface;
-    vec3 subsurfaceRadiusScale;
-    vec3 fuzzColor;
-    float fuzzRoughness; // OpenPBR: roughness du velvet/fuzz
-    float dispersionScale; // OpenPBR: dispersion chromatique (Cauchy)
-    float abbeNumber;      // OpenPBR: nombre d'Abbe
-
-    float thinFilmWeight;    // OpenPBR: poids du film mince (iridescence)
-    float thinFilmThickness; // OpenPBR: épaisseur du film mince (nm)
-    float thinFilmIor;       // OpenPBR: IOR du film mince
-
-    vec2 uvScale; // UV tiling scale (MaterialX uvtiling)
-    float specularWeight; // specular lobe weight (OpenPBR specular_weight, SS specular)
-
-    float anisotropyRotation;     // base specular anisotropy rotation [0,1) = full turn
-    float coatAnisotropyRotation; // coat anisotropy rotation [0,1) = full turn
-
-    float coatAffectRoughness;       // SS: coat raises base roughness (0 = no effect)
-    float transmissionExtraRoughness; // SS: extra roughness for refraction lobe only
-
-    // Material type: MATERIAL_TYPE_DISNEY (0) or MATERIAL_TYPE_HAIR (1)
-    float materialType;
 };
 
 #ifndef OPT_SHADERTOY
@@ -213,14 +164,6 @@ struct LightSampleRec
     float dist;
     float pdf;
 };
-
-// Runtime MaterialX closure contract, configured per material in GetMaterial().
-int gMaterialXClosureContractValid = 0;
-int gMaterialXClosureKind = 0;
-int gMaterialXClosureModel = 0;
-int gMaterialXClosureFlags = 0;
-
-/*__PROCEDURAL_GEOMETRY_INJECTION__*/
 
 //RNG from code by Moroz Mykhailo (https://www.shadertoy.com/view/wltcRS)
 
