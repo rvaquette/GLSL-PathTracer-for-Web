@@ -1,0 +1,15 @@
+# Treat binary assets as binary so Git never applies EOL/text normalization.
+# (Normalization silently strips CR bytes, corrupting packaged binaries such as
+#  the Emscripten .data package and shifting its internal byte offsets.)
+*.data   binary
+*.wasm   binary
+*.bin    binary
+*.glb    binary
+*.gltf   binary
+*.hdr    binary
+*.exr    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.ktx2   binary
+*.obj    binary
