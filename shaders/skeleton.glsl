@@ -38,7 +38,7 @@
 //                  REFLECTION par lumiere -> INDIRECT -> EMISSION -> TRANSMISSION
 //                  en UNE passe, sans rebonds). Utilise pour le preview basse-res.
 //  - Non defini  : path tracer recursif (rebonds + NEE/MIS).
-// #define OPT_MTLX_GATHER
+//#define OPT_MTLX_GATHER
 
 // Nombre de vec4 par lumiere dans lightsTex.
 #define LIGHT_TEX_STRIDE 5
@@ -79,7 +79,7 @@ vec3 EvalBackground(Ray r)
     float theta = acos(clamp(r.direction.y, -1.0, 1.0));
     vec2 uv = vec2((PI + atan(r.direction.z, r.direction.x)) * INV_TWO_PI, theta * INV_PI) + vec2(envMapRot, 0.0);
 
-    vec3 color = texture(envMapTex, uv).rgb;
+    vec3 color = textureLod(envMapTex, uv, 0.0).rgb * envMapIntensity;
     return color;
 }
 
@@ -119,21 +119,6 @@ float pt_Metal()     { return clamp(pt_mMetal, 0.0, 1.0); }
 float pt_SpecTrans() { return clamp(pt_mSpecTrans, 0.0, 1.0); }
 vec3  pt_BaseColor() { return max(pt_mBaseColor, 0.0); }
 float pt_Ior()       { return clamp(pt_mIor, 1.0, 3.0); } // vraie IOR du resume
-
-// Emission model-agnostique : evalue la surface generee en contexte EMISSION avec
-// l'emission activee. Le bloc emission interne du materiau (quel que soit le
-// modele) s'en charge ; les lobes BSDF renvoient ~0 en contexte EMISSION.
-vec3 pt_MtlxEmission(vec3 N, vec3 V, vec3 P)
-{
-    vec3 T, B; Onb(N, T, B);
-    g_ptN = N; g_ptV = V; g_ptL = V; g_ptP = P;
-    g_ptTangent = T; g_ptBitangent = B;
-    g_ptClosureType = CLOSURE_TYPE_EMISSION;
-    g_ptOcclusion = 1.0;
-    g_ptEmitEmission = 1;
-    State s;
-    return mtlxEvalSurface(s).color;
-}
 
 // Rugosite microfacette (roughness_uv anisotrope) issue du resume, pour que la
 // pdf d'echantillonnage soit coherente avec la BRDF evaluee.
@@ -397,7 +382,7 @@ void pt_PrepareMaterial(inout State state, in Ray r)
 vec3 pt_Emission(State state, Ray r)
 {
     if (state.mat.materialType == MATERIAL_TYPE_MATERIALX)
-        return pt_MtlxEmission(state.ffnormal, -r.direction, state.fhp);
+        return pt_mEmission;
     return state.mat.emission;
 }
 
@@ -520,8 +505,8 @@ vec3 mtlxShadeGather(State state, Ray r)
     if (numOfLights == 0)
         color += pt_MtlxLayerStackResponse(CLOSURE_TYPE_INDIRECT, vec3(0.0), V, N, P, T, 1.0);
 
-    // (3) EMISSION (model-agnostique, via la closure en contexte EMISSION)
-    color += pt_MtlxEmission(N, V, P);
+    // (3) EMISSION (resume model-agnostique pt_mEmission, sans re-evaluer la closure)
+    color += pt_mEmission;
 
     // (4) TRANSMISSION : refraction basee sur l'environnement (meme regle : la
     //  refraction de l'envmap n'est prise en compte que sans lumiere analytique).
@@ -649,6 +634,7 @@ void main()
     Ray r = GenerateCameraRay(coordsTile + jitter);
 
 #ifdef OPT_MTLX_GATHER
+/*
     // Mode gather : un seul point de shading.
     vec3 pixelColor;
     State state;
@@ -668,7 +654,10 @@ void main()
         // Fond envmap uniquement sans lumiere analytique ; sinon fond noir.
         pixelColor = (numOfLights == 0) ? EvalBackground(r) : vec3(0.0);
     }
+*/
 
+    // Mode path tracer recursif.
+    vec3 pixelColor = PathTrace(r);
     color = vec4(pixelColor, 1.0);
 #else
     // Mode path tracer recursif.
