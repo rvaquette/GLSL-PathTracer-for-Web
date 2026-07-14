@@ -149,8 +149,14 @@ void pt_MtlxTangentFrame(vec3 N, vec3 tangent, out vec3 T, out vec3 B)
     vec3 tan = tangent;
     if (pt_mAnisotropy > 0.0 && abs(pt_mAnisoRotDeg) > 0.0)
     {
-        vec3 rt = vec3(0.0);
-        mx_rotate_vector3(tan, pt_mAnisoRotDeg, N, rt);
+        // Rotate the tangent around N by pt_mAnisoRotDeg degrees (Rodrigues,
+        // identical to MaterialX mx_rotate_vector3). Inlined here because that
+        // helper is only emitted in the injected library when the material
+        // actually uses a rotation node, so the host must not depend on it.
+        float ang = radians(pt_mAnisoRotDeg);
+        float ca = cos(ang), sa = sin(ang);
+        vec3 axis = normalize(N);
+        vec3 rt = tan * ca + cross(axis, tan) * sa + axis * dot(axis, tan) * (1.0 - ca);
         tan = normalize(rt);
     }
     vec3 t = tan - dot(tan, N) * N;
