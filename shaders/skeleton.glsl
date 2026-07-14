@@ -108,6 +108,13 @@ vec3 EvalBackground(Ray r)
 vec3 pt_ToLocal(vec3 X, vec3 Y, vec3 Z, vec3 v) { return vec3(dot(v, X), dot(v, Y), dot(v, Z)); }
 vec3 pt_ToWorld(vec3 X, vec3 Y, vec3 Z, vec3 v) { return v.x * X + v.y * Y + v.z * Z; }
 
+// The MaterialX closure path below depends entirely on the injected code
+// (mx_* library, pt_m* material globals, pt_LoadParams, pt_InitMaterialSummary,
+// pt_MtlxLayerStackResponse, CLOSURE_TYPE_*). It is compiled ONLY when a
+// MaterialX closure was injected (OPT_MATERIALX). Disney-only scenes skip it and
+// shade through the built-in Disney model.
+#ifdef OPT_MATERIALX
+
 // Interface materiau MODEL-AGNOSTIQUE. L'hote ne doit PAS dependre des noms de
 // parametres propres a un modele de surface (glTF PBR: roughness/metallic/ior...;
 // standard_surface: metalness/specular_IOR/...). Il lit le RESUME pt_m* (emis par
@@ -295,6 +302,7 @@ vec3 SampleMtlxClosure(int matID, State state, vec3 V, vec3 N,
     L = normalize(pt_ToWorld(T, B, N, Ll));
     return EvalMtlxClosure(matID, state, V, N, L, pdf, flags);
 }
+#endif // OPT_MATERIALX
 
 // =============================================================================
 //  AIGUILLAGE DES MATERIAUX (MaterialX vs repli Disney integre)
@@ -361,6 +369,7 @@ void pt_PrepareMaterial(inout State state, in Ray r)
 {
     int mtype = pt_MaterialType(state.matID);
     state.mat.materialType = mtype;
+#ifdef OPT_MATERIALX
     if (mtype == MATERIAL_TYPE_MATERIALX)
     {
         // Coordonnees de texture du hit : indispensables pour que les noeuds
@@ -373,6 +382,7 @@ void pt_PrepareMaterial(inout State state, in Ray r)
         state.eta = dot(r.direction, state.normal) < 0.0 ? (1.0 / mtlxIor) : mtlxIor;
     }
     else
+#endif
     {
         pt_LoadDisneyMaterial(state, r);
     }
@@ -381,24 +391,30 @@ void pt_PrepareMaterial(inout State state, in Ray r)
 // Emission de surface selon le type de materiau.
 vec3 pt_Emission(State state, Ray r)
 {
+#ifdef OPT_MATERIALX
     if (state.mat.materialType == MATERIAL_TYPE_MATERIALX)
         return pt_mEmission;
+#endif
     return state.mat.emission;
 }
 
 // Ponts d'evaluation/echantillonnage : aiguillage runtime par type de materiau.
 vec3 pt_EvalClosure(State state, vec3 V, vec3 N, vec3 L, out float pdf, out int flags)
 {
+#ifdef OPT_MATERIALX
     if (state.mat.materialType == MATERIAL_TYPE_MATERIALX)
         return EvalMtlxClosure(state.matID, state, V, N, L, pdf, flags);
+#endif
     flags = 0;
     return DisneyEval(state, V, N, L, pdf);
 }
 
 vec3 pt_SampleClosure(State state, vec3 V, vec3 N, out vec3 L, out float pdf, out int flags)
 {
+#ifdef OPT_MATERIALX
     if (state.mat.materialType == MATERIAL_TYPE_MATERIALX)
         return SampleMtlxClosure(state.matID, state, V, N, L, pdf, flags);
+#endif
     flags = 0;
     return DisneySample(state, V, N, L, pdf);
 }
@@ -471,6 +487,7 @@ vec3 pt_LightToDirectional(Light l, vec3 P, out vec3 dir, out float dist)
     return l.emission * (l.area * cosL / max(dist * dist, EPS));
 }
 
+#ifdef OPT_MATERIALX
 vec3 mtlxShadeGather(State state, Ray r)
 {
     vec3 N = normalize(state.ffnormal);
@@ -516,6 +533,7 @@ vec3 mtlxShadeGather(State state, Ray r)
     color *= surfaceOpacity;
     return color;
 }
+#endif // OPT_MATERIALX
 
 // Version gather pour les materiaux Disney : eclairage direct par les lumieres
 // (BRDF Disney, cosinus inclus) + emission. L'environnement n'est pas
