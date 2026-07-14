@@ -125,6 +125,7 @@ float pt_Rough()     { return clamp(pt_mRough, 1e-3, 1.0); }
 float pt_Metal()     { return clamp(pt_mMetal, 0.0, 1.0); }
 float pt_SpecTrans() { return clamp(pt_mSpecTrans, 0.0, 1.0); }
 vec3  pt_BaseColor() { return max(pt_mBaseColor, 0.0); }
+vec3  pt_TransColor() { return max(pt_mTransColor, 0.0); } // teinte du lobe transmissif (verre/miel)
 float pt_Ior()       { return clamp(pt_mIor, 1.0, 3.0); } // vraie IOR du resume
 
 // Rugosite microfacette (roughness_uv anisotrope) issue du resume, pour que la
@@ -211,6 +212,22 @@ vec3 pt_TransBtdf(vec3 V, vec3 L, vec2 alpha, float eta, float F, vec3 tint)
     return tint * (1.0 - F) * D * G2 * abs(VdotH) * jacobian * eta * eta / NdotV;
 }
 
+// Moitie REFLEXION du lobe dielectrique microfacette (verre), renvoie f * NdotL
+// en repere local (V.z>0, L.z>0). Achromatique : la reflexion de Fresnel de
+// l'interface air/verre est blanche (non teintee par baseColor). Le stack injecte
+// n'emet pas cette contribution pour le lobe transmissif, d'ou son ajout ici.
+vec3 pt_ReflBrdf(vec3 V, vec3 L, vec2 alpha, float F)
+{
+    vec3 H = normalize(V + L);
+    if (H.z < 0.0) H = -H;
+    float NdotV = max(V.z, 1e-4);
+    float NdotL = max(L.z, 1e-4);
+    float avgA = mx_average_alpha(alpha);
+    float D = mx_ggx_NDF(H, alpha);
+    float G2 = mx_ggx_smith_G2(NdotL, NdotV, avgA);
+    return vec3(F * D * G2 / (4.0 * NdotV));
+}
+
 vec3 EvalMtlxClosure(int matID, State state, vec3 V, vec3 N, vec3 L,
                      out float pdf, out int flags)
 {
@@ -248,13 +265,22 @@ vec3 EvalMtlxClosure(int matID, State state, vec3 V, vec3 N, vec3 L,
         // REFLECTION : reponse complete du stack MaterialX injecte (BRDF * cos).
         vec3 f = pt_MtlxLayerStackResponse(CLOSURE_TYPE_REFLECTION, L, V, N,
                                            state.fhp, state.tangent, 1.0);
+        // Le stack exclut le lobe transmissif : sa reflexion de Fresnel (bord
+        // brillant du verre aux angles rasants) est absente. On l'ajoute
+        // analytiquement, ponderee par le poids du lobe verre.
+        float glassW = pt_SpecTrans() * (1.0 - pt_Metal());
+        if (glassW > 0.0)
+            f += glassW * pt_ReflBrdf(Vl, Ll, alpha, F);
         pdf = pSpec * pt_ReflPdf(Vl, Ll, alpha) + pDiff * max(Ll.z, 0.0) * INV_PI;
         return f;
     }
     else
     {
         // TRANSMISSION : BTDF dielectrique analytique (vrai rayon refracte).
-        vec3 tint = sqrt(pt_BaseColor());
+        // Teinte par la couleur de transmission du modele (transmission_color, ou
+        // base color pour gltf/disney). sqrt : la teinte s'applique aux DEUX
+        // interfaces (entree+sortie) d'un verre solide.
+        vec3 tint = sqrt(pt_TransColor());
         vec3 f = pt_TransBtdf(Vl, Ll, alpha, eta, F, tint);
         pdf = pTrans * pt_TransPdf(Vl, Ll, alpha, eta);
         return f;
