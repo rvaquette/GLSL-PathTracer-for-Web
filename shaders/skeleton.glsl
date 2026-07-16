@@ -1,5 +1,7 @@
 #include common/gles300.glsl
 
+#define OPT_MTLX_GATHER
+
 // =============================================================================
 //  Squelette de path tracer pour un materiau MaterialX (glTF PBR "glass").
 //
@@ -181,9 +183,7 @@ float pt_ReflPdf(vec3 V, vec3 L, vec2 alpha)
 float pt_TransPdf(vec3 V, vec3 L, vec2 alpha, float eta)
 {
     if (L.z >= 0.0) return 0.0;
-    vec3 Hraw = L + V * eta;
-    if (dot(Hraw, Hraw) < 1e-6) return 0.0;
-    vec3 H = normalize(Hraw);
+    vec3 H = normalize(L + V * eta);
     if (H.z < 0.0) H = -H;
     float VdotH = dot(V, H);
     float LdotH = dot(L, H);
@@ -199,10 +199,7 @@ float pt_TransPdf(vec3 V, vec3 L, vec2 alpha, float eta)
 // BTDF dielectrique microfacette (Walter), renvoie f * |NdotL| en local.
 vec3 pt_TransBtdf(vec3 V, vec3 L, vec2 alpha, float eta, float F, vec3 tint)
 {
-    vec3 Hraw = L + V * eta;
-    // Demi-vecteur degenere (eta ~ 1, transmission droite) : pas de BTDF microfacette.
-    if (dot(Hraw, Hraw) < 1e-6) return vec3(0.0);
-    vec3 H = normalize(Hraw);
+    vec3 H = normalize(L + V * eta);
     if (H.z < 0.0) H = -H;
     float VdotH = dot(V, H);
     float LdotH = dot(L, H);
@@ -233,18 +230,6 @@ vec3 pt_ReflBrdf(vec3 V, vec3 L, vec2 alpha, float F)
     return vec3(F * D * G2 / (4.0 * NdotV));
 }
 
-// Reflectance de SEPARATION (probabilite) pour une membrane thin-walled (bulle de
-// savon, verre fin). La COULEUR iridescente exacte vient du stack injecte
-// (mx_dielectric_bsdf a film mince, reponse REFLECTION) ; cette fonction ne fixe
-// QUE la probabilite reflexion/transmission (donc la transmittance 1-R), pas la
-// teinte. L'IOR effectif est plancher a 1.5 pour qu'une bulle a specular_ior=1.0
-// reflete quand meme : le film mince reflechit sans saut d'indice du substrat.
-float pt_ThinWallReflectance(float VdotH)
-{
-    float effIor = max(pt_Ior(), 1.5);
-    return clamp(mx_fresnel_dielectric(VdotH, effIor), 0.03, 0.98);
-}
-
 vec3 EvalMtlxClosure(int matID, State state, vec3 V, vec3 N, vec3 L,
                      out float pdf, out int flags)
 {
@@ -256,70 +241,52 @@ vec3 EvalMtlxClosure(int matID, State state, vec3 V, vec3 N, vec3 L,
     vec3 Ll = pt_ToLocal(T, B, N, L);
     vec2 alpha = pt_MtlxAlpha();
 
+    // eta = ni/nt : 1/ior en entrant dans le milieu, ior en sortant.
+    float safeIor = pt_Ior();
+    float eta = (dot(V, state.normal) > 0.0) ? (1.0 / safeIor) : safeIor;
+
     bool reflectSide = Ll.z * Vl.z > 0.0;
     flags = reflectSide ? CLOSURE_FLAG_REFLECT : CLOSURE_FLAG_TRANSMIT;
-
-    // eta = ni/nt : 1/ior en entrant, ior en sortant. Membrane mince
-    // (geometry_thin_walled : bulle de savon / verre fin) : la lumiere traverse
-    // tout droit -> eta = 1 (pas de refraction).
-    float safeIor = pt_Ior();
-    float eta = pt_mThinWalled ? 1.0
-              : ((dot(V, state.normal) > 0.0) ? (1.0 / safeIor) : safeIor);
 
     // Fresnel au demi-vecteur (probabilites de selection des lobes).
     vec3 H = reflectSide ? normalize(Vl + Ll) : normalize(Ll + Vl * eta);
     if (H.z < 0.0) H = -H;
     float VdotH = abs(dot(Vl, H));
+    float F = mx_fresnel_dielectric(VdotH, 1.0 / eta);
+
+    float wSpec  = mix(F, 1.0, pt_Metal());
+    float wTrans = (1.0 - pt_Metal()) * pt_SpecTrans() * (1.0 - F);
+    float wDiff  = (1.0 - pt_Metal()) * (1.0 - pt_SpecTrans());
+    float wSum   = max(wSpec + wTrans + wDiff, 1e-6);
+    float pSpec  = wSpec / wSum;
+    float pTrans = wTrans / wSum;
+    float pDiff  = wDiff / wSum;
 
     if (reflectSide)
     {
         // REFLECTION : reponse complete du stack MaterialX injecte (BRDF * cos).
-        // SEUL appel au stack (le corps injecte est enorme : un seul site d'appel
-        // pour eviter de le dupliquer a la compilation). Les modes mince/epais
-        // partagent cette evaluation ; seule la pdf (et l'ajout Fresnel) differe.
         vec3 f = pt_MtlxLayerStackResponse(CLOSURE_TYPE_REFLECTION, L, V, N,
                                            state.fhp, state.tangent, 1.0);
-        if (pt_mThinWalled)
-        {
-            // Bulle de savon : la couleur iridescente EST la reponse du stack ;
-            // la separation reflexion/transmission suit la reflectance du film.
-            float R = pt_ThinWallReflectance(VdotH);
-            pdf = R * pt_ReflPdf(Vl, Ll, alpha);
-        }
-        else
-        {
-            float F = mx_fresnel_dielectric(VdotH, 1.0 / eta);
-            float wSpec = mix(F, 1.0, pt_Metal());
-            float wDiff = (1.0 - pt_Metal()) * (1.0 - pt_SpecTrans());
-            float wTrans = (1.0 - pt_Metal()) * pt_SpecTrans() * (1.0 - F);
-            float wSum  = max(wSpec + wTrans + wDiff, 1e-6);
-            // Le stack exclut la reflexion de Fresnel du lobe transmissif (bord
-            // brillant du verre aux angles rasants) : on l'ajoute analytiquement.
-            float glassW = pt_SpecTrans() * (1.0 - pt_Metal());
-            if (glassW > 0.0)
-                f += glassW * pt_ReflBrdf(Vl, Ll, alpha, F);
-            pdf = (wSpec / wSum) * pt_ReflPdf(Vl, Ll, alpha)
-                + (wDiff / wSum) * max(Ll.z, 0.0) * INV_PI;
-        }
+        // Le stack exclut le lobe transmissif : sa reflexion de Fresnel (bord
+        // brillant du verre aux angles rasants) est absente. On l'ajoute
+        // analytiquement, ponderee par le poids du lobe verre.
+        float glassW = pt_SpecTrans() * (1.0 - pt_Metal());
+        if (glassW > 0.0)
+            f += glassW * pt_ReflBrdf(Vl, Ll, alpha, F);
+        pdf = pSpec * pt_ReflPdf(Vl, Ll, alpha) + pDiff * max(Ll.z, 0.0) * INV_PI;
         return f;
     }
-
-    // TRANSMISSION.
-    // Membrane mince : transmission dirac (rayon droit) -> non evaluable ici (pdf 0).
-    if (pt_mThinWalled)
-        return vec3(0.0);
-
-    // Verre solide : BTDF dielectrique analytique (vrai rayon refracte). Teinte par
-    // la couleur de transmission (sqrt : appliquee aux deux interfaces du verre).
-    float F = mx_fresnel_dielectric(VdotH, 1.0 / eta);
-    float wSpec = mix(F, 1.0, pt_Metal());
-    float wDiff = (1.0 - pt_Metal()) * (1.0 - pt_SpecTrans());
-    float wTrans = (1.0 - pt_Metal()) * pt_SpecTrans() * (1.0 - F);
-    float wSum  = max(wSpec + wTrans + wDiff, 1e-6);
-    vec3 tint = sqrt(pt_TransColor());
-    vec3 f = pt_TransBtdf(Vl, Ll, alpha, eta, F, tint);
-    pdf = (wTrans / wSum) * pt_TransPdf(Vl, Ll, alpha, eta);
-    return f;
+    else
+    {
+        // TRANSMISSION : BTDF dielectrique analytique (vrai rayon refracte).
+        // Teinte par la couleur de transmission du modele (transmission_color, ou
+        // base color pour gltf/disney). sqrt : la teinte s'applique aux DEUX
+        // interfaces (entree+sortie) d'un verre solide.
+        vec3 tint = sqrt(pt_TransColor());
+        vec3 f = pt_TransBtdf(Vl, Ll, alpha, eta, F, tint);
+        pdf = pTrans * pt_TransPdf(Vl, Ll, alpha, eta);
+        return f;
+    }
 }
 
 vec3 SampleMtlxClosure(int matID, State state, vec3 V, vec3 N,
@@ -333,57 +300,36 @@ vec3 SampleMtlxClosure(int matID, State state, vec3 V, vec3 N,
     vec3 Vl = pt_ToLocal(T, B, N, V);
     vec2 alpha = pt_MtlxAlpha();
 
+    float safeIor = pt_Ior();
+    float eta = (dot(V, state.normal) > 0.0) ? (1.0 / safeIor) : safeIor;
+
+    vec3 H = mx_ggx_importance_sample_VNDF(vec2(rand(), rand()), Vl, alpha);
+    if (H.z < 0.0) H = -H;
+    float VdotH = abs(dot(Vl, H));
+    float F = mx_fresnel_dielectric(VdotH, 1.0 / eta);
+
+    float wSpec  = mix(F, 1.0, pt_Metal());
+    float wTrans = (1.0 - pt_Metal()) * pt_SpecTrans() * (1.0 - F);
+    float wDiff  = (1.0 - pt_Metal()) * (1.0 - pt_SpecTrans());
+    float wSum   = max(wSpec + wTrans + wDiff, 1e-6);
+    float pSpec  = wSpec / wSum;
+    float pTrans = wTrans / wSum;
+
     vec3 Ll;
-
-    // MEMBRANE MINCE : reflexion iridescente (film mince ; evaluee par le SEUL
-    // appel final a EvalMtlxClosure) OU transmission dirac (rayon inchange).
-    if (pt_mThinWalled)
+    float u = rand();
+    if (u < pSpec)                       // reflexion speculaire
     {
-        vec3 Hh = mx_ggx_importance_sample_VNDF(vec2(rand(), rand()), Vl, alpha);
-        if (Hh.z < 0.0) Hh = -Hh;
-        float R = pt_ThinWallReflectance(abs(dot(Vl, Hh)));
-        if (rand() >= R)
-        {
-            // Transmission dirac : le rayon traverse la pellicule sans devier.
-            L = -V;
-            flags = CLOSURE_FLAG_TRANSMIT;
-            pdf = max(1.0 - R, 1e-3);              // probabilite discrete de transmission
-            return pt_TransColor() * (1.0 - R);    // f/pdf = teinte de transmission
-        }
-        Ll = reflect(-Vl, Hh);                     // reflexion : evaluee plus bas
+        Ll = reflect(-Vl, H);
     }
-    else
+    else if (u < pSpec + pTrans)         // refraction
     {
-        float safeIor = pt_Ior();
-        float eta = (dot(V, state.normal) > 0.0) ? (1.0 / safeIor) : safeIor;
-
-        vec3 H = mx_ggx_importance_sample_VNDF(vec2(rand(), rand()), Vl, alpha);
-        if (H.z < 0.0) H = -H;
-        float VdotH = abs(dot(Vl, H));
-        float F = mx_fresnel_dielectric(VdotH, 1.0 / eta);
-
-        float wSpec  = mix(F, 1.0, pt_Metal());
-        float wTrans = (1.0 - pt_Metal()) * pt_SpecTrans() * (1.0 - F);
-        float wDiff  = (1.0 - pt_Metal()) * (1.0 - pt_SpecTrans());
-        float wSum   = max(wSpec + wTrans + wDiff, 1e-6);
-        float pSpec  = wSpec / wSum;
-        float pTrans = wTrans / wSum;
-
-        float u = rand();
-        if (u < pSpec)                       // reflexion speculaire
-        {
+        Ll = refract(-Vl, H, eta);
+        if (dot(Ll, Ll) < 1e-8)          // reflexion totale interne -> reflexion
             Ll = reflect(-Vl, H);
-        }
-        else if (u < pSpec + pTrans)         // refraction
-        {
-            Ll = refract(-Vl, H, eta);
-            if (dot(Ll, Ll) < 1e-8)          // reflexion totale interne -> reflexion
-                Ll = reflect(-Vl, H);
-        }
-        else                                 // diffus
-        {
-            Ll = CosineSampleHemisphere(rand(), rand());
-        }
+    }
+    else                                 // diffus
+    {
+        Ll = CosineSampleHemisphere(rand(), rand());
     }
     Ll = normalize(Ll);
 
@@ -727,7 +673,7 @@ Ray GenerateCameraRay(vec2 uv)
 
 void main()
 {
-#ifdef OPT_MTLX_GATHER
+#ifdef OPT_LOWRES
     vec2 coordsTile = TexCoords;
     InitRNG(gl_FragCoord.xy, 1);
 #else
@@ -740,7 +686,6 @@ void main()
     Ray r = GenerateCameraRay(coordsTile + jitter);
 
 #ifdef OPT_MTLX_GATHER
-/*
     // Mode gather : un seul point de shading.
     vec3 pixelColor;
     State state;
@@ -760,18 +705,17 @@ void main()
         // Fond envmap uniquement sans lumiere analytique ; sinon fond noir.
         pixelColor = (numOfLights == 0) ? EvalBackground(r) : vec3(0.0);
     }
-*/
-
-    // Mode path tracer recursif.
-    vec3 pixelColor = PathTrace(r);
-    color = vec4(pixelColor, 1.0);
 #else
     // Mode path tracer recursif.
     vec3 pixelColor = PathTrace(r);
+#endif
 
+    color = vec4(pixelColor, 1.0);
+
+#ifndef OPT_LOWRES
     vec4 accumColor = texture(accumTexture, coordsTile);
 
     // Sortie lineaire HDR : accumulation + tone-mapping dans une passe separee.
-    color = vec4(pixelColor, 1.0) + accumColor;
+    color += accumColor;
 #endif
 }
