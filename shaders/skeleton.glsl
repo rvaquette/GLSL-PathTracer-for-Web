@@ -553,6 +553,11 @@ vec3 mtlxShadeGather(State state, Ray r)
     //  L'envmap n'est utilisee comme SOURCE DE LUMIERE que s'il n'y a pas de
     //  lumiere analytique dans la scene. Des qu'une lumiere existe, elle prime
     //  et l'eclairage/les reflets d'environnement sont desactives.
+    //
+    //  Cette logique garantit que l'on n'ajoute pas deux contributions d'environnement
+    //  simultanées : les lumières analytiques prennent le pas, et l'envmap est
+    //  utilisée uniquement comme fallback lorsque la scène est éclairée uniquement
+    //  par le fond.
     if (numOfLights == 0)
         color += pt_MtlxLayerStackResponse(CLOSURE_TYPE_INDIRECT, vec3(0.0), V, N, P, T, 1.0);
 
@@ -561,6 +566,10 @@ vec3 mtlxShadeGather(State state, Ray r)
 
     // (4) TRANSMISSION : refraction basee sur l'environnement (meme regle : la
     //  refraction de l'envmap n'est prise en compte que sans lumiere analytique).
+    //
+    //  En pratique, la transmission envmap participe uniquement dans les scènes
+    //  sans lumières analytiques pour éviter de combiner deux modèles d'éclairage
+    //  différents sur le même point de surface.
     if (numOfLights == 0)
         color += pt_MtlxLayerStackResponse(CLOSURE_TYPE_TRANSMISSION, vec3(0.0), V, N, P, T, 1.0);
 
