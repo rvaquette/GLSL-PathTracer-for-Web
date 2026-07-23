@@ -173,7 +173,7 @@ void sampleLightSource(LightData light, vec3 position, out lightshader result)
 //                   accumulation (the preview pass overwrites each frame).
 //    - full-res   : tiled sampling (tileOffset/frameNum) + progressive
 //                   accumulation (color = sample + previous accumulated sum).
-//  pt_MtlxGeneratedMain() (spliced above, renamed from the generated ESSL main)
+//  mtlxGeneratedMain() (spliced above, renamed from the generated ESSL main)
 //  writes the shaded color into `color` (via `#define out1 color`).
 // -----------------------------------------------------------------------------
 
@@ -212,7 +212,7 @@ void main()
         // EsslHostShaderGenerator path folds the params as literals and binds the
         // geometry via pt_MtlxBindGeom(...).
         /*__MTLX_ESSL_HOST_SETUP__*/
-        pt_MtlxGeneratedMain();
+        mtlxGeneratedMain();
     }
     else
     {
