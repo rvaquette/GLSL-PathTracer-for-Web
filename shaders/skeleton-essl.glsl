@@ -28,15 +28,9 @@ uniform bool u_refractionTwoSided;
 
 mat4 pt_MtlxEnvMatrix()
 {
-    // The reflection samples mx_latlong_projection(M * dir) and must match the
-    // host background EvalBackground(dir):
-    //   EvalBackground:  u.x = atan(dir.z, dir.x)/2PI + 0.5 + envMapRot
-    //   mx_latlong:      u.x = atan(d.x, -d.z)/2PI + 0.5           (d = M*dir)
-    // Solving atan((M*dir).x, -(M*dir).z) == atan(dir.z, dir.x) + 2PI*envMapRot
-    // for a Y-axis rotation of angle a gives a = PI/2 - 2PI*envMapRot. Using the
-    // opposite sign rotates the reflected environment by 180 deg (the scenery
-    // behind the object then appears in front of it).
-    float a = 1.57079632679 - 6.28318530718 * envMapRot;
+    // Match MaterialXView exactly: fixed +PI/2 Y rotation in u_envMatrix.
+    // MaterialXView does not fold an app-side env rotation into this matrix.
+    const float a = 1.57079632679;
     float c = cos(a);
     float s = sin(a);
     return mat4(
@@ -49,17 +43,17 @@ mat4 pt_MtlxEnvMatrix()
 
 #define u_envMatrix pt_MtlxEnvMatrix()
 #define u_envRadiance envMapTex
-#define u_envIrradiance envMapTex
+#define u_envIrradiance envMapIrradianceTex
 #define u_envLightIntensity envMapIntensity
-// envMapTex has no mip chain (RGB32F, LINEAR min filter), so LOD selection cannot
-// prefilter the environment. MaterialX's filtered-importance-sampling (FIS)
-// therefore integrates the GGX/diffuse lobe entirely from mip 0: it uses a
-// DETERMINISTIC spherical-Fibonacci sequence of u_envRadianceSamples samples, so
-// temporal accumulation does NOT add new samples (unlike the path tracer). One
-// sample collapses every material to a mirror; use a full sample set so rough and
-// diffuse responses are integrated in a single frame.
-#define u_envRadianceMips 1
 #define u_envRadianceSamples 1
+
+// Separate irradiance env map (texture unit 20). When no irradiance file is
+// provided, the renderer binds the same texture as envMapTex here, so the
+// behaviour is identical to the previous single-map approach.
+uniform sampler2D envMapIrradianceTex;
+// Number of mip levels in the radiance env map; set by the renderer at load
+// time from the actual texture dimensions so LOD selection is correct.
+uniform int u_envRadianceMips;
 
 // Environment background sampled on ray miss (mirrors EvalBackground in
 // shaders/skeleton.glsl so the ESSL host shows the same environment behind the
@@ -190,16 +184,7 @@ Ray GenerateCameraRay(vec2 uv)
 
 void main()
 {
-#ifdef OPT_LOWRES
-    vec2 coordsTile = TexCoords;
-    InitRNG(gl_FragCoord.xy, 1);
-#else
-    vec2 coordsTile = mix(tileOffset, tileOffset + invNumTiles, TexCoords);
-    InitRNG(gl_FragCoord.xy, frameNum);
-#endif
-
-    vec2 jitter = (vec2(rand(), rand()) - 0.5) / resolution;
-    Ray r = GenerateCameraRay(coordsTile + jitter);
+    Ray r = GenerateCameraRay(TexCoords);
 
     State state;
     state.depth = 0;
@@ -218,12 +203,4 @@ void main()
     {
         color = vec4(EvalBackground(r), 1.0);
     }
-
-#ifndef OPT_LOWRES
-    // Progressive accumulation: output sample + previous accumulated sum (the
-    // output pass copies it back to accumTexture; the tonemap divides by the
-    // sample counter). Skipped for the low-res preview.
-    vec4 accumColor = texture(accumTexture, coordsTile);
-    color += accumColor;
-#endif
 }
