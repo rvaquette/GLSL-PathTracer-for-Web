@@ -59,7 +59,9 @@ vec4 EvalEnvMap(Ray r)
     float theta = acos(clamp(r.direction.y, -1.0, 1.0));
     vec2 uv = vec2((PI + atan(r.direction.z, r.direction.x)) * INV_TWO_PI, theta * INV_PI) + vec2(envMapRot, 0.0);
     
-    vec3 color = texture(envMapTex, uv).rgb;
+    // Force mip 0: the luminance CDF is built from the base-level texels, so any
+    // derivative-driven LOD selection would desync the sampled colour and pdf.
+    vec3 color = textureLod(envMapTex, uv, 0.0).rgb;
     float pdf = Luminance(color) / envMapTotalSum;
                 
     return vec4(color, (pdf * envMapRes.x * envMapRes.y) / (TWO_PI * PI * sin(theta)));
@@ -69,7 +71,8 @@ vec4 SampleEnvMap(inout vec3 color)
 {
     vec2 uv = BinarySearch(rand() * envMapTotalSum);
 
-    color = texture(envMapTex, uv).rgb;
+    // Force mip 0 to stay consistent with the base-level luminance CDF.
+    color = textureLod(envMapTex, uv, 0.0).rgb;
     float pdf = Luminance(color) / envMapTotalSum;
 
     uv.x -= envMapRot;
