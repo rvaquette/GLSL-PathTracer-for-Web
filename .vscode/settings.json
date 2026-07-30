@@ -2,5 +2,20 @@
     "liveServer.settings.port": 5505,
     "liveServer.settings.mount": [
         ["/test_root", "./"]
-    ]
+    ],
+    // Ne pas ouvrir automatiquement le sous-module "scenes" (3+ Go) comme dépôt Git
+    "git.detectSubmodules": false,
+    "git.autoRepositoryDetection": "openEditors",
+    "git.repositoryScanMaxDepth": 1,
+    // Ne pas surveiller les gros dossiers d'assets / le sous-module dans le file watcher
+    "files.watcherExclude": {
+        "**/.git/**": true,
+        "**/scenes/**": true,
+        "**/renders/**": true,
+        "**/dist-min/**": true
+    },
+    "search.exclude": {
+        "**/scenes/**": true,
+        "**/renders/**": true
+    }
 }
