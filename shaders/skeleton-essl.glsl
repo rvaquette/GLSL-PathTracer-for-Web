@@ -28,9 +28,10 @@ uniform bool u_refractionTwoSided;
 
 mat4 pt_MtlxEnvMatrix()
 {
-    // Match MaterialXView exactly: fixed +PI/2 Y rotation in u_envMatrix.
-    // MaterialXView does not fold an app-side env rotation into this matrix.
-    const float a = 1.57079632679;
+    // Fold the app-side env rotation (envMapRot) into u_envMatrix so that
+    // reflections/refractions track the rotating background (EvalBackground)
+    // instead of a fixed +PI/2 orientation: a = PI/2 - 2*PI*envMapRot.
+    float a = 1.57079632679 - 6.28318530718 * envMapRot;
     float c = cos(a);
     float s = sin(a);
     return mat4(
@@ -45,7 +46,12 @@ mat4 pt_MtlxEnvMatrix()
 #define u_envRadiance envMapTex
 #define u_envIrradiance envMapIrradianceTex
 #define u_envLightIntensity envMapIntensity
-#define u_envRadianceSamples 1
+// Environment radiance IBL sample count. Matches MaterialXView exactly
+// (javascript/MaterialXView/source/viewer.js: u_envRadianceSamples = 16), so
+// mx_environment_radiance() integrates the prefiltered radiance map with the
+// same filtered-importance-sampling budget as MaterialXView. Using 1 here (the
+// previous value) produced a single, noisy glossy sample that did not match.
+#define u_envRadianceSamples 16
 
 // Separate irradiance env map (texture unit 20). When no irradiance file is
 // provided, the renderer binds the same texture as envMapTex here, so the

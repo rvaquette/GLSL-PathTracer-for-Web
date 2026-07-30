@@ -41,6 +41,12 @@
 out vec4 color;
 in vec2 TexCoords;
 
+// Mode preview basse resolution, pilote par UNIFORM (et non plus par #define
+// OPT_LOWRES) : le meme programme sert la passe pleine resolution (accumulation
+// tuilee) et la passe preview mono-echantillon. Cela evite de compiler deux fois
+// le lourd closure MaterialX injecte (un seul programme partage).
+uniform bool uLowRes;
+
 // =============================================================================
 //  LUMIERES : lecture depuis lightsTex (sampler2D)
 //    slot 0 : position.xyz | slot 1 : emission.xyz | slot 2 : u.xyz
@@ -159,6 +165,25 @@ vec3 PathTrace(Ray r)
     vec3 throughput = vec3(1.0);
     bool primaryRay = true;
 
+    // Suivi de milieu volumetrique (verre teinte solide : OpenPBR/standard_surface
+    // avec transmission_depth > 0). Absorption de Beer-Lambert le long du segment
+    // parcouru DANS le materiau : les zones epaisses (centre de l'objet)
+    // s'assombrissent davantage que les bords fins -> gradient de teinte correct
+    // (au lieu d'une teinte de surface plate). Un rayon droit de longueur
+    // transmission_depth reproduit exactement transmission_color.
+    bool inMedium = false;
+    vec3 mediumSigmaA = vec3(0.0);   // coefficient d'extinction (par unite de longueur)
+
+    // Le dernier rebond echantillonne (5) etait-il une TRANSMISSION (refraction) ?
+    // Sert a repartir la contribution de l'environnement sans double-comptage :
+    //   - la REFLEXION de l'environnement est fournie par l'IBL (3) a chaque hit ;
+    //     un rayon reflechi qui part vers le ciel NE doit donc PAS rajouter le fond
+    //     (sinon l'env est compte deux fois -> aspect miroir) ;
+    //   - la TRANSMISSION (env vu A TRAVERS le verre, attenue par l'absorption de
+    //     volume) vient au contraire des rayons refractes qui finissent sur le
+    //     fond -> on ajoute le fond apres une transmission.
+    bool lastWasTransmit = false;
+
     for (int depth = 0; depth < maxDepth; depth++)
     {
         State state;
@@ -168,14 +193,19 @@ vec3 PathTrace(Ray r)
 
         if (!ClosestHit(r, state, lightSample))
         {
-            // Fond sur miss primaire : le ciel visible directement par la camera.
-            // Sur miss secondaire, CLOSURE_TYPE_INDIRECT au hit precedent a deja
-            // capture la contribution de l'environnement pour ce rebond.
-            if (primaryRay || numOfLights == 0)
+            // Fond sur miss primaire (ciel visible directement par la camera) et
+            // apres une transmission (environnement vu a travers le verre). Apres
+            // une reflexion, l'environnement est deja fourni par l'IBL (3).
+            if (primaryRay || lastWasTransmit)
                 radiance += throughput * EvalBackground(r);
             break;
         }
         primaryRay = false;
+
+        // Absorption volumetrique sur le segment qui vient d'etre parcouru dans le
+        // milieu (distance parcourue = state.hitDist depuis le hit precedent).
+        if (inMedium)
+            throughput *= exp(-mediumSigmaA * state.hitDist);
 
         pt_PrepareMaterial(state, r);
 
@@ -189,22 +219,25 @@ vec3 PathTrace(Ray r)
         // (2) Eclairage direct (NEE + MIS) par les lumieres de scene.
         radiance += throughput * DirectLight(r, state);
 
-        // (3) Contribution indirecte de l'environnement (BRDF * envmap via IBL).
-        //     Remplace la contribution de fond que les rebonds recursifs vers
-        //     l'environnement auraient apportee ; evite le double-comptage en
-        //     n'ajoutant pas de fond sur les miss secondaires.
+        // (3) Reflexion indirecte de l'environnement (BRDF speculaire * envmap via
+        //     IBL, pondere par Fresnel : faible au centre, forte au bord). C'est la
+        //     SEULE source de reflexion de l'environnement -> les rayons reflechis
+        //     de (5) ne rajoutent pas le fond (voir lastWasTransmit).
         radiance += throughput * pt_MtlxLayerStackResponse(
             CLOSURE_TYPE_INDIRECT, vec3(0.0), V, N, state.fhp, T, 1.0);
 
-        // (4) Transmission de l'environnement a travers le materiau.
-        //     Pour les verres (pt_mSpecTrans > 0) : donne la transparence vers
-        //     l'environnement sans necessiter de rebonds supplementaires.
-        //     Pour les opaques : pt_mSpecTrans ~= 0, la reponse est nulle.
-        radiance += throughput * pt_MtlxLayerStackResponse(
-            CLOSURE_TYPE_TRANSMISSION, vec3(0.0), V, N, state.fhp, T, 1.0);
+        // (4) Transmission de l'environnement a travers le materiau, en un seul
+        //     passage (verres a TEINTE DE SURFACE : transmission_depth == 0). Pour
+        //     un verre VOLUMETRIQUE (transmission_depth > 0), la transparence vient
+        //     des rayons refractes de (5) + l'absorption de volume (gradient selon
+        //     l'epaisseur) ; ce passage plat l'aplatirait, on le saute donc.
+        if (pt_mTransDepth <= 0.0)
+            radiance += throughput * pt_MtlxLayerStackResponse(
+                CLOSURE_TYPE_TRANSMISSION, vec3(0.0), V, N, state.fhp, T, 1.0);
 
-        // (5) Rebond indirect : echantillonne le BSDF genere (interactions
-        //     scene-vs-scene : reflexions et refractions entre objets).
+        // (5) Rebond indirect : echantillonne le BSDF genere (refraction a travers
+        //     le verre pour la transmission volumetrique, reflexions/refractions
+        //     entre objets de la scene).
         vec3 L;
         float pdf;
         int flags;
@@ -213,6 +246,32 @@ vec3 PathTrace(Ray r)
             break;
 
         throughput *= f / pdf;
+        lastWasTransmit = (flags == CLOSURE_FLAG_TRANSMIT);
+
+        // Entree/sortie de milieu volumetrique sur une refraction (transmission).
+        // A l'entree (rayon franchissant la surface vers l'interieur), on arme
+        // l'absorption depuis transmission_color/transmission_depth ; a la sortie
+        // on la desarme. La reflexion interne totale conserve l'etat courant.
+        if (flags == CLOSURE_FLAG_TRANSMIT && !pt_mThinWalled)
+        {
+            if (dot(L, state.normal) < 0.0)
+            {
+                // Densite du milieu : reconcilie transmission_depth (exprime dans
+                // les unites du document MaterialX) avec l'echelle du modele dans
+                // la scene (state.hitDist est en unites monde). >1 assombrit le
+                // coeur epais, <1 l'eclaircit. A augmenter si le centre du verre
+                // parait trop clair (sous-absorbe), a diminuer s'il est trop opaque.
+                const float PT_VOLUME_DENSITY = 3.0;
+                inMedium = pt_mTransDepth > 0.0;
+                mediumSigmaA = inMedium
+                    ? PT_VOLUME_DENSITY * (-log(clamp(pt_mTransColor, vec3(1e-3), vec3(1.0))) / pt_mTransDepth)
+                    : vec3(0.0);
+            }
+            else
+            {
+                inMedium = false;
+            }
+        }
 
         // Roulette russe.
         if (depth > 2)
@@ -245,13 +304,17 @@ Ray GenerateCameraRay(vec2 uv)
 
 void main()
 {
-#ifdef OPT_LOWRES
-    vec2 coordsTile = TexCoords;
-    InitRNG(gl_FragCoord.xy, 1);
-#else
-    vec2 coordsTile = mix(tileOffset, tileOffset + invNumTiles, TexCoords);
-    InitRNG(gl_FragCoord.xy, frameNum);
-#endif
+    vec2 coordsTile;
+    if (uLowRes)
+    {
+        coordsTile = TexCoords;
+        InitRNG(gl_FragCoord.xy, 1);
+    }
+    else
+    {
+        coordsTile = mix(tileOffset, tileOffset + invNumTiles, TexCoords);
+        InitRNG(gl_FragCoord.xy, frameNum);
+    }
 
     // Jitter sous-pixel pour l'anti-aliasing / accumulation temporelle.
     vec2 jitter = (vec2(rand(), rand()) - 0.5) / resolution;
@@ -262,10 +325,11 @@ void main()
 
     color = vec4(pixelColor, 1.0);
 
-#ifndef OPT_LOWRES
-    vec4 accumColor = texture(accumTexture, coordsTile);
+    if (!uLowRes)
+    {
+        vec4 accumColor = texture(accumTexture, coordsTile);
 
-    // Sortie lineaire HDR : accumulation + tone-mapping dans une passe separee.
-    color += accumColor;
-#endif
+        // Sortie lineaire HDR : accumulation + tone-mapping dans une passe separee.
+        color += accumColor;
+    }
 }
