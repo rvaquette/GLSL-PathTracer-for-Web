@@ -22,11 +22,6 @@
  * SOFTWARE.
  */
 
-// MaterialX closure definitions (EvalMtlxClosure/SampleMtlxClosure) are injected
-// here from scene.proceduralMaterialGlsl under OPT_MATERIALX. See
-// mtlx_closure.glsl for the forward declarations and the closure bridge.
-/*__PROCEDURAL_MATERIAL_INJECTION__*/
-
 void GetMaterial(inout State state, in Ray r)
 {
     int index = state.matID * MATERIALS_TEX_STRIDE;
@@ -190,8 +185,7 @@ vec3 DirectLight(in Ray r, in State state, bool isSurface)
 
         if (isSurface)
         {
-            int cflags;
-            scatterSample.f = EvalClosureBridge(state, -r.direction, state.ffnormal, lightDir, scatterSample.pdf, cflags);
+            scatterSample.f = DisneyEval(state, -r.direction, state.ffnormal, lightDir, scatterSample.pdf);
         }
         else
         {
@@ -212,8 +206,7 @@ vec3 DirectLight(in Ray r, in State state, bool isSurface)
         
         if (!inShadow)
         {
-            int cflags;
-            scatterSample.f = EvalClosureBridge(state, -r.direction, state.ffnormal, lightDir, scatterSample.pdf, cflags);
+            scatterSample.f = DisneyEval(state, -r.direction, state.ffnormal, lightDir, scatterSample.pdf);
 
             if (scatterSample.pdf > 0.0)
             {
@@ -261,8 +254,7 @@ vec3 DirectLight(in Ray r, in State state, bool isSurface)
 
             if (isSurface)
             {
-                int cflags;
-                scatterSample.f = EvalClosureBridge(state, -r.direction, state.ffnormal, lightSample.direction, scatterSample.pdf, cflags);
+                scatterSample.f = DisneyEval(state, -r.direction, state.ffnormal, lightSample.direction, scatterSample.pdf);
             }
             else
             {
@@ -283,8 +275,7 @@ vec3 DirectLight(in Ray r, in State state, bool isSurface)
 
             if (!inShadow)
             {
-                int cflags;
-                scatterSample.f = EvalClosureBridge(state, -r.direction, state.ffnormal, lightSample.direction, scatterSample.pdf, cflags);
+                scatterSample.f = DisneyEval(state, -r.direction, state.ffnormal, lightSample.direction, scatterSample.pdf);
 
                 float misWeight = 1.0;
                 if(light.area > 0.0) // No MIS for distant light
@@ -450,8 +441,7 @@ vec4 PathTrace(Ray r)
                 radiance += DirectLight(r, state, true) * throughput;
 
                 // Sample BSDF for color and outgoing direction
-                int cflags;
-                scatterSample.f = SampleClosureBridge(state, -r.direction, state.ffnormal, scatterSample.L, scatterSample.pdf, cflags);
+                scatterSample.f = DisneySample(state, -r.direction, state.ffnormal, scatterSample.L, scatterSample.pdf);
                 if (scatterSample.pdf > 0.0)
                     throughput *= scatterSample.f / scatterSample.pdf;
                 else

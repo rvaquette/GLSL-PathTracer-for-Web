@@ -1,13 +1,5 @@
 #include common/gles300.glsl
 
-// OPT_MTLX_GATHER active le dispatch runtime du type de closure dans le code
-// genere (PT_CLOSURE_CTX = g_ptClosureType). Requis pour que les appels a
-// pt_MtlxLayerStackResponse(CLOSURE_TYPE_INDIRECT/TRANSMISSION, ...) dans
-// PathTrace evaluent correctement les closures correspondantes.
-// Sans ce define, l'assembleur substitue PT_CLOSURE_CTX = CLOSURE_TYPE_REFLECTION
-// et toutes les closures sont evaluees en mode reflexion => noir pour le verre.
-#define OPT_MTLX_GATHER
-
 // =============================================================================
 //  Hote path tracer pour scenes MaterialX uniquement (sans repli Disney).
 //
@@ -34,6 +26,7 @@
 #include common/globals.glsl
 #include common/intersection.glsl
 #include common/sampling.glsl
+#include common/envmap.glsl
 
 // Nombre de vec4 par lumiere dans lightsTex.
 #define LIGHT_TEX_STRIDE 5
@@ -74,14 +67,6 @@ Light GetLight(int i)
 
 #include "common/anyhit.glsl"
 
-// Fond / environnement quand un rayon ne touche rien.
-vec3 EvalBackground(Ray r)
-{
-    float theta = acos(clamp(r.direction.y, -1.0, 1.0));
-    vec2 uv = vec2((PI + atan(r.direction.z, r.direction.x)) * INV_TWO_PI, theta * INV_PI) + vec2(envMapRot, 0.0);
-    return textureLod(envMapTex, uv, 0.0).rgb * envMapIntensity;
-}
-
 // =============================================================================
 //  POINT D'INJECTION DU MATERIAU GENERE
 //
@@ -101,7 +86,11 @@ vec3 EvalBackground(Ray r)
 // =============================================================================
 void pt_PrepareMaterial(inout State state, in Ray r)
 {
-    g_ptTexcoord = state.texCoord;
+    // MaterialX procedural texcoord/geomprop UV0 nodes expect the authored V
+    // (origin top-left); state.texCoord.y is stored GL-flipped (1 - authoredV) by
+    // the glTF loader for direct GL texture sampling, so hand MaterialX the
+    // un-flipped V. Image nodes re-flip via fileTextureVerticalFlip (generator).
+    g_ptTexcoord = vec2(state.texCoord.x, 1.0 - state.texCoord.y);
     pt_LoadParams(state.matID);
     pt_InitMaterialSummary();
     float safeIor = clamp(pt_mIor, 1.0, 3.0);
@@ -109,135 +98,190 @@ void pt_PrepareMaterial(inout State state, in Ray r)
 }
 
 // =============================================================================
-//  ECLAIRAGE DIRECT (NEE + MIS) via lightsTex
+//  ECLAIRAGE DIRECT (NEE + MIS) : importance sampling de l'environnement et des
+//  lumieres analytiques, evalue via la closure MaterialX generee. Reprend la
+//  logique de shaders/common/pathtrace.glsl (DirectLight) adaptee au host
+//  MaterialX (EvalMtlxClosure au lieu du pont de closures Disney).
 // =============================================================================
 vec3 DirectLight(in Ray r, in State state)
 {
     vec3 Ld = vec3(0.0);
-    if (numOfLights == 0)
-        return Ld;
-
     vec3 V = -r.direction;
     vec3 N = state.ffnormal;
     vec3 scatterPos = state.fhp + N * EPS;
+    float bsdfPdf;
+    int flags;
 
-    int idx = min(int(rand() * float(numOfLights)), numOfLights - 1);
-    Light light = GetLight(idx);
-
-    LightSampleRec ls;
-    SampleOneLight(light, scatterPos, ls);
-
-    if (dot(ls.direction, ls.normal) < 0.0 && ls.pdf > 0.0)
+    // Lumiere d'environnement (importance sampling de l'envmap).
+#ifdef OPT_ENVMAP
+#ifndef OPT_UNIFORM_LIGHT
     {
-        Ray shadowRay = Ray(scatterPos, ls.direction);
-        if (!AnyHit(shadowRay, ls.dist - EPS))
+        vec3 Li;
+        vec4 dirPdf = SampleEnvMap(Li);
+        vec3 lightDir = dirPdf.xyz;
+        float lightPdf = dirPdf.w;
+
+        if (lightPdf > 0.0 && !AnyHit(Ray(scatterPos, lightDir), INF - EPS))
         {
-            float bsdfPdf;
-            int flags;
+            vec3 f = EvalMtlxClosure(state.matID, state, V, N, lightDir, bsdfPdf, flags);
+            if (bsdfPdf > 0.0)
+            {
+                float misWeight = PowerHeuristic(lightPdf, bsdfPdf);
+                if (misWeight > 0.0)
+                    Ld += misWeight * Li * f * envMapIntensity / lightPdf;
+            }
+        }
+    }
+#endif
+#endif
+
+    // Lumieres analytiques (rect / sphere / distant) via lightsTex.
+#ifdef OPT_LIGHTS
+    {
+        int idx = min(int(rand() * float(numOfLights)), numOfLights - 1);
+        Light light = GetLight(idx);
+
+        LightSampleRec ls;
+        SampleOneLight(light, scatterPos, ls);
+
+        if (dot(ls.direction, ls.normal) < 0.0 && ls.pdf > 0.0 &&
+            !AnyHit(Ray(scatterPos, ls.direction), ls.dist - EPS))
+        {
             vec3 f = EvalMtlxClosure(state.matID, state, V, N, ls.direction, bsdfPdf, flags);
             if (bsdfPdf > 0.0)
             {
-                float misWeight = PowerHeuristic(ls.pdf, bsdfPdf);
+                float misWeight = 1.0;
+                if (light.area > 0.0)  // pas de MIS pour les lumieres distantes
+                    misWeight = PowerHeuristic(ls.pdf, bsdfPdf);
                 Ld += misWeight * f * ls.emission / max(ls.pdf, EPS);
             }
         }
     }
+#endif
+
     return Ld;
 }
 
 // =============================================================================
-//  INTEGRATEUR (path tracing avec rebonds + NEE/MIS)
+//  INTEGRATEUR (path tracing recursif NEE/MIS)
 //
-//  A chaque hit :
-//    1. Eclairage direct (NEE) par les lumieres de scene.
-//    2. Contribution indirecte de l'environnement (CLOSURE_TYPE_INDIRECT) via le
-//       code genere : remplace le fond sur miss pour les rayons secondaires.
-//    3. Transmission de l'environnement a travers le materiau (CLOSURE_TYPE_TRANSMISSION)
-//       pour les materiaux transparents (verres) : donne l'effet de transparence
-//       sans attendre que les rebonds recursifs sortent de la scene.
-//    4. Rebond BSDF (SampleMtlxClosure) pour les interactions scene-vs-scene.
-//  Sur miss primaire (rayon camera ne touchant rien) : fond environnement direct.
-//  Sur miss secondaire : couvert par CLOSURE_TYPE_INDIRECT ; aucun fond ajoute.
+//  Reprend la logique de shaders/common/pathtrace.glsl (le path tracer officiel,
+//  correct pour la transmission, le verre et les milieux) mais evalue les
+//  materiaux via la closure MaterialX generee (EvalMtlxClosure/SampleMtlxClosure)
+//  au lieu du modele Disney.
+//
+//  Principes (identiques au path tracer officiel) :
+//    - La transmission (refraction) est produite par SampleMtlxClosure : un rayon
+//      qui traverse un verre est simplement re-trace dans la scene.
+//    - L'environnement vu EN REFLEXION comme EN REFRACTION provient naturellement
+//      des rayons qui ratent la scene (terme de miss ci-dessous, pondere MIS) :
+//      aucun terme analytique separe (plus de double-comptage / verre incorrect).
+//    - OPT_MEDIUM (active automatiquement quand un materiau OpenPBR/standard_surface
+//      declare transmission_depth) applique l'absorption volumetrique de
+//      Beer-Lambert le long du trajet interne d'un verre solide.
 // =============================================================================
 vec3 PathTrace(Ray r)
 {
     vec3 radiance   = vec3(0.0);
     vec3 throughput = vec3(1.0);
-    bool primaryRay = true;
+    State state;
+    LightSampleRec lightSample;
 
-    // Suivi de milieu volumetrique (verre teinte solide : OpenPBR/standard_surface
-    // avec transmission_depth > 0). Absorption de Beer-Lambert le long du segment
-    // parcouru DANS le materiau : les zones epaisses (centre de l'objet)
-    // s'assombrissent davantage que les bords fins -> gradient de teinte correct
-    // (au lieu d'une teinte de surface plate). Un rayon droit de longueur
-    // transmission_depth reproduit exactement transmission_color.
+    // pdf du dernier echantillon BSDF, pour le MIS avec l'environnement sur miss.
+    float bsdfPdf = 0.0;
+
+#ifdef OPT_MEDIUM
+    // Suivi de milieu volumetrique (verre teinte solide : transmission_depth > 0).
+    // sigma_a est derive de transmission_color / transmission_depth (calibration
+    // Beer-Lambert MaterialX) : a l'epaisseur transmission_depth la couleur
+    // transmise vaut transmission_color, donc les zones epaisses s'assombrissent
+    // davantage que les bords fins (gradient de teinte correct).
     bool inMedium = false;
-    vec3 mediumSigmaA = vec3(0.0);   // coefficient d'extinction (par unite de longueur)
+    vec3 mediumSigmaT = vec3(0.0);
+#endif
 
-    // Le dernier rebond echantillonne (5) etait-il une TRANSMISSION (refraction) ?
-    // Sert a repartir la contribution de l'environnement sans double-comptage :
-    //   - la REFLEXION de l'environnement est fournie par l'IBL (3) a chaque hit ;
-    //     un rayon reflechi qui part vers le ciel NE doit donc PAS rajouter le fond
-    //     (sinon l'env est compte deux fois -> aspect miroir) ;
-    //   - la TRANSMISSION (env vu A TRAVERS le verre, attenue par l'absorption de
-    //     volume) vient au contraire des rayons refractes qui finissent sur le
-    //     fond -> on ajoute le fond apres une transmission.
-    bool lastWasTransmit = false;
-
-    for (int depth = 0; depth < maxDepth; depth++)
+    for (state.depth = 0; ; state.depth++)
     {
-        State state;
-        state.depth = depth;
-        state.eta = 1.0;
-        LightSampleRec lightSample;
-
         if (!ClosestHit(r, state, lightSample))
         {
-            // Fond sur miss primaire (ciel visible directement par la camera) et
-            // apres une transmission (environnement vu a travers le verre). Apres
-            // une reflexion, l'environnement est deja fourni par l'IBL (3).
-            if (primaryRay || lastWasTransmit)
-                radiance += throughput * EvalBackground(r);
+            // Miss : contribution de l'environnement (fond direct sur le rayon
+            // primaire, IBL sur les rebonds, avec MIS contre l'echantillonnage
+            // d'environnement de DirectLight).
+#ifdef OPT_UNIFORM_LIGHT
+            radiance += uniformLightCol * throughput;
+#else
+#ifdef OPT_ENVMAP
+            vec4 envMapColPdf = EvalEnvMap(r);
+            float misWeight = 1.0;
+            if (state.depth > 0)
+                misWeight = PowerHeuristic(bsdfPdf, envMapColPdf.w);
+            radiance += misWeight * envMapColPdf.rgb * throughput * envMapIntensity;
+#endif
+#endif
             break;
         }
-        primaryRay = false;
 
-        // Absorption volumetrique sur le segment qui vient d'etre parcouru dans le
-        // milieu (distance parcourue = state.hitDist depuis le hit precedent).
+#ifdef OPT_MEDIUM
+        // Absorption sur le segment qui vient d'etre parcouru dans le milieu.
         if (inMedium)
-            throughput *= exp(-mediumSigmaA * state.hitDist);
+            throughput *= exp(-mediumSigmaT * state.hitDist);
+#endif
 
         pt_PrepareMaterial(state, r);
 
         vec3 V = -r.direction;
         vec3 N = state.ffnormal;
-        vec3 T = state.tangent;
+
+        // (0) Opacite (coverage / cutout MaterialX). standard_surface (color3
+        //     `opacity`), open_pbr (`geometry_opacity`) et gltf_pbr (`alpha`)
+        //     exposent une opacite < 1 : la surface n'est presente que
+        //     stochastiquement (alpha blend). Avec la probabilite (1 - opacite) le
+        //     rayon traverse la surface sans l'ombrer et poursuit tout droit,
+        //     laissant voir l'arriere-plan / la geometrie situee derriere. Le
+        //     rebond n'est pas compte (depth--) pour ne pas epuiser maxDepth sur
+        //     des traversees transparentes.
+        float ptOpacity = pt_mOpacity;
+        vec3 ptEmission = pt_mEmission;
+        // Opacite PROCEDURALE (pilotee par un nodegraph, ex. masque de decoupe
+        // sinusoidal sur la position) et EMISSION procedurale (ex. debug UV qui
+        // EMET une coordonnee) : invisibles depuis le resume constant. On evalue
+        // le graphe une fois au point d'impact (independant de la direction
+        // lumineuse) ; mtlxEvalSurface ecrit le masque dans g_ptOpacity et
+        // l'emission dans g_ptEmission.
+        if (pt_mProcOpacity || pt_mProcEmission)
+        {
+            g_ptV = V;
+            g_ptN = N;
+            g_ptL = N;
+            g_ptP = state.fhp;
+            g_ptTangent = state.tangent;
+            g_ptBitangent = state.bitangent;
+            g_ptClosureType = CLOSURE_TYPE_REFLECTION;
+            g_ptEmitEmission = 0;
+            mtlxEvalSurface(state);
+            g_ptEmitEmission = 1;
+            if (pt_mProcOpacity) ptOpacity = g_ptOpacity;
+            if (pt_mProcEmission) ptEmission = g_ptEmission;
+        }
+        if (ptOpacity < 1.0 && rand() >= ptOpacity)
+        {
+            r.origin = state.fhp + r.direction * EPS;
+            state.depth--;
+            continue;
+        }
 
         // (1) Emission de surface.
-        radiance += throughput * pt_mEmission;
+        radiance += throughput * ptEmission;
 
-        // (2) Eclairage direct (NEE + MIS) par les lumieres de scene.
+        // Arret a la profondeur maximale (apres l'emission, avant tout rebond).
+        if (state.depth == maxDepth)
+            break;
+
+        // (2) Eclairage direct (NEE + MIS) : environnement + lumieres analytiques.
         radiance += throughput * DirectLight(r, state);
 
-        // (3) Reflexion indirecte de l'environnement (BRDF speculaire * envmap via
-        //     IBL, pondere par Fresnel : faible au centre, forte au bord). C'est la
-        //     SEULE source de reflexion de l'environnement -> les rayons reflechis
-        //     de (5) ne rajoutent pas le fond (voir lastWasTransmit).
-        radiance += throughput * pt_MtlxLayerStackResponse(
-            CLOSURE_TYPE_INDIRECT, vec3(0.0), V, N, state.fhp, T, 1.0);
-
-        // (4) Transmission de l'environnement a travers le materiau, en un seul
-        //     passage (verres a TEINTE DE SURFACE : transmission_depth == 0). Pour
-        //     un verre VOLUMETRIQUE (transmission_depth > 0), la transparence vient
-        //     des rayons refractes de (5) + l'absorption de volume (gradient selon
-        //     l'epaisseur) ; ce passage plat l'aplatirait, on le saute donc.
-        if (pt_mTransDepth <= 0.0)
-            radiance += throughput * pt_MtlxLayerStackResponse(
-                CLOSURE_TYPE_TRANSMISSION, vec3(0.0), V, N, state.fhp, T, 1.0);
-
-        // (5) Rebond indirect : echantillonne le BSDF genere (refraction a travers
-        //     le verre pour la transmission volumetrique, reflexions/refractions
-        //     entre objets de la scene).
+        // (3) Rebond indirect : echantillonne la closure MaterialX generee
+        //     (reflexion speculaire/diffuse ou refraction a travers le verre).
         vec3 L;
         float pdf;
         int flags;
@@ -246,44 +290,56 @@ vec3 PathTrace(Ray r)
             break;
 
         throughput *= f / pdf;
-        lastWasTransmit = (flags == CLOSURE_FLAG_TRANSMIT);
+        bsdfPdf = pdf;
 
-        // Entree/sortie de milieu volumetrique sur une refraction (transmission).
-        // A l'entree (rayon franchissant la surface vers l'interieur), on arme
-        // l'absorption depuis transmission_color/transmission_depth ; a la sortie
-        // on la desarme. La reflexion interne totale conserve l'etat courant.
-        if (flags == CLOSURE_FLAG_TRANSMIT && !pt_mThinWalled)
+        r.direction = L;
+        r.origin = state.fhp + L * EPS;
+
+#ifdef OPT_MEDIUM
+        // Entree/sortie de milieu volumetrique sur une refraction a travers un
+        // verre solide (non thin-walled). A l'entree (rayon franchissant la surface
+        // vers l'interieur) on arme l'absorption depuis transmission_color /
+        // transmission_depth ; a la sortie on la desarme.
+        //
+        // IMPORTANT: classifier avec le cote INCIDENT du hit (r.direction vs
+        // normale geometrique) est plus stable que tester L. Avec des normales
+        // lissees/microfacettes, L peut avoir un signe ambigu et laisser le rayon
+        // "coince" en mode inMedium.
+        if ((flags & CLOSURE_FLAG_TRANSMIT) != 0 && !pt_mThinWalled)
         {
-            if (dot(L, state.normal) < 0.0)
+            if (dot(r.direction, state.normal) < 0.0)
             {
-                // Densite du milieu : reconcilie transmission_depth (exprime dans
-                // les unites du document MaterialX) avec l'echelle du modele dans
-                // la scene (state.hitDist est en unites monde). >1 assombrit le
-                // coeur epais, <1 l'eclaircit. A augmenter si le centre du verre
-                // parait trop clair (sous-absorbe), a diminuer s'il est trop opaque.
-                const float PT_VOLUME_DENSITY = 3.0;
                 inMedium = pt_mTransDepth > 0.0;
-                mediumSigmaA = inMedium
-                    ? PT_VOLUME_DENSITY * (-log(clamp(pt_mTransColor, vec3(1e-3), vec3(1.0))) / pt_mTransDepth)
+                mediumSigmaT = inMedium
+                    ? ((-log(clamp(pt_mTransColor, vec3(1e-3), vec3(1.0))) + max(pt_mTransScatter, vec3(0.0))) / pt_mTransDepth)
                     : vec3(0.0);
             }
             else
             {
                 inMedium = false;
+                mediumSigmaT = vec3(0.0);
             }
         }
+#endif
 
         // Roulette russe.
-        if (depth > 2)
+#ifdef OPT_RR
+        if (state.depth >= OPT_RR_DEPTH)
+        {
+            float q = min(max(throughput.x, max(throughput.y, throughput.z)) + 0.001, 0.95);
+            if (rand() > q)
+                break;
+            throughput /= q;
+        }
+#else
+        if (state.depth > 2)
         {
             float q = max(throughput.x, max(throughput.y, throughput.z));
             if (rand() > q)
                 break;
             throughput /= max(q, EPS);
         }
-
-        r.origin = state.fhp + L * EPS;
-        r.direction = L;
+#endif
     }
     return radiance;
 }
