@@ -34,6 +34,13 @@
 out vec4 color;
 in vec2 TexCoords;
 
+// Calibration volume (phase 2): les scenes MaterialX Honey utilisent souvent des
+// unites de scatter qui ne correspondent pas directement a l'echelle monde de la
+// scene. Ce facteur evite un noircissement excessif tout en gardant le vrai
+// scattering active.
+const float PT_VOLUME_SCATTER_SCALE = 0.08;
+const float PT_VOLUME_ABSORB_SCALE = 0.50;
+
 // Mode preview basse resolution, pilote par UNIFORM (et non plus par #define
 // OPT_LOWRES) : le meme programme sert la passe pleine resolution (accumulation
 // tuilee) et la passe preview mono-echantillon. Cela evite de compiler deux fois
@@ -163,6 +170,133 @@ vec3 DirectLight(in Ray r, in State state)
 }
 
 // =============================================================================
+//  TRANSMITTANCE VOLUMETRIQUE DES RAYONS D'OMBRE
+//
+//  Evalue l'attenuation Beer-Lambert dans le milieu courant le long d'un rayon
+//  d'ombre, puis verifie la visibilite apres la sortie du volume.
+// =============================================================================
+vec3 EvalVolumeShadowTransmittance(in vec3 scatterPos, in vec3 lightDir, float maxDist, in vec3 sigmaT, out bool visible)
+{
+    visible = true;
+
+    // Pas d'attenuation volumetrique -> test de visibilite classique.
+    if (max(max(sigmaT.x, sigmaT.y), sigmaT.z) <= 0.0)
+    {
+        visible = !AnyHit(Ray(scatterPos + lightDir * EPS, lightDir), maxDist);
+        return vec3(1.0);
+    }
+
+    Ray shadowRay = Ray(scatterPos + lightDir * EPS, lightDir);
+    State s;
+    LightSampleRec ls;
+    s.depth = 0;
+    s.isEmitter = false;
+
+    // Si on ne trouve pas de frontiere, on evite un noircissement artificiel.
+    if (!ClosestHit(shadowRay, s, ls))
+    {
+        visible = true;
+        return vec3(1.0);
+    }
+
+    float dInMedium = min(s.hitDist, maxDist);
+    vec3 Tr = exp(-sigmaT * max(dInMedium, 0.0));
+
+    // Si aucun obstacle avant la source (ou l'infini env), c'est visible.
+    if (s.hitDist >= maxDist - EPS)
+    {
+        visible = true;
+        return Tr;
+    }
+
+    // Si le premier hit est un emetteur, on garde la contribution attenuee.
+    if (s.isEmitter)
+    {
+        visible = true;
+        return Tr;
+    }
+
+    // Sinon, distinguer frontiere transmissive du volume vs occluseur opaque.
+    pt_PrepareMaterial(s, shadowRay);
+    bool isVolumeBoundary = (pt_mTransDepth > 0.0) && !pt_mThinWalled;
+    if (!isVolumeBoundary)
+    {
+        visible = false;
+        return vec3(0.0);
+    }
+
+    // Apres la sortie du volume, poursuivre le test de visibilite classique.
+    Ray outRay = Ray(s.fhp + lightDir * EPS, lightDir);
+    float remaining = maxDist;
+    if (maxDist < INF * 0.5)
+        remaining = max(maxDist - s.hitDist - EPS, 0.0);
+    visible = !AnyHit(outRay, remaining);
+    return visible ? Tr : vec3(0.0);
+}
+
+// =============================================================================
+//  ECLAIRAGE DIRECT VOLUMETRIQUE (NEE + MIS)
+//
+//  Evalue la lumiere directe au point de collision dans le milieu homogene,
+//  avec une phase HG et MIS (pdf lumiere vs pdf phase).
+// =============================================================================
+vec3 DirectLightVolume(in Ray r, in vec3 scatterPos, float g, in vec3 sigmaT)
+{
+    vec3 Ld = vec3(0.0);
+
+#ifdef OPT_ENVMAP
+#ifndef OPT_UNIFORM_LIGHT
+    {
+        vec3 Li;
+        vec4 dirPdf = SampleEnvMap(Li);
+        vec3 lightDir = dirPdf.xyz;
+        float lightPdf = dirPdf.w;
+
+        bool visible;
+        vec3 Tr = EvalVolumeShadowTransmittance(scatterPos, lightDir, INF - EPS, sigmaT, visible);
+        if (lightPdf > 0.0 && visible)
+        {
+            Li *= Tr;
+            float phase = PhaseHG(dot(-r.direction, lightDir), g);
+            if (phase > 0.0)
+            {
+                float misWeight = PowerHeuristic(lightPdf, phase);
+                if (misWeight > 0.0)
+                    Ld += misWeight * Li * vec3(phase) * envMapIntensity / lightPdf;
+            }
+        }
+    }
+#endif
+#endif
+
+#ifdef OPT_LIGHTS
+    {
+        int idx = min(int(rand() * float(numOfLights)), numOfLights - 1);
+        Light light = GetLight(idx);
+
+        LightSampleRec ls;
+        SampleOneLight(light, scatterPos, ls);
+
+        bool visible;
+        vec3 Tr = EvalVolumeShadowTransmittance(scatterPos, ls.direction, ls.dist - EPS, sigmaT, visible);
+        if (dot(ls.direction, ls.normal) < 0.0 && ls.pdf > 0.0 && visible)
+        {
+            float phase = PhaseHG(dot(-r.direction, ls.direction), g);
+            if (phase > 0.0)
+            {
+                float misWeight = 1.0;
+                if (light.area > 0.0)
+                    misWeight = PowerHeuristic(ls.pdf, phase);
+                Ld += misWeight * vec3(phase) * (ls.emission * Tr) / max(ls.pdf, EPS);
+            }
+        }
+    }
+#endif
+
+    return Ld;
+}
+
+// =============================================================================
 //  INTEGRATEUR (path tracing recursif NEE/MIS)
 //
 //  Reprend la logique de shaders/common/pathtrace.glsl (le path tracer officiel,
@@ -196,8 +330,12 @@ vec3 PathTrace(Ray r)
     // Beer-Lambert MaterialX) : a l'epaisseur transmission_depth la couleur
     // transmise vaut transmission_color, donc les zones epaisses s'assombrissent
     // davantage que les bords fins (gradient de teinte correct).
+    // Phase 1 : vrai scattering homogene (distance libre + phase HG) quand
+    // transmission_scatter est present ; sinon absorption pure.
     bool inMedium = false;
-    vec3 mediumSigmaT = vec3(0.0);
+    vec3 mediumSigmaA = vec3(0.0);
+    vec3 mediumSigmaS = vec3(0.0);
+    float mediumG = 0.0;
 #endif
 
     for (state.depth = 0; ; state.depth++)
@@ -222,9 +360,50 @@ vec3 PathTrace(Ray r)
         }
 
 #ifdef OPT_MEDIUM
-        // Absorption sur le segment qui vient d'etre parcouru dans le milieu.
         if (inMedium)
-            throughput *= exp(-mediumSigmaT * state.hitDist);
+        {
+            vec3 sigmaT = mediumSigmaA + max(mediumSigmaS, vec3(0.0));
+
+            // Si la diffusion est non nulle, on echantillonne une collision
+            // volumetrique avant la surface (free-flight homogene).
+            if (max(mediumSigmaS.x, max(mediumSigmaS.y, mediumSigmaS.z)) > 0.0)
+            {
+                float sigmaMaj = max(max(sigmaT.x, sigmaT.y), sigmaT.z);
+                if (sigmaMaj > 0.0)
+                {
+                    float t = -log(max(1.0 - rand(), 1e-6)) / sigmaMaj;
+                    if (t < state.hitDist)
+                    {
+                        vec3 p = r.origin + r.direction * t;
+                        throughput *= exp(-sigmaT * t);
+                        throughput *= mediumSigmaS / sigmaMaj;
+
+                        // Phase 2: NEE volumetrique (env + lumieres) au point de
+                        // collision dans le milieu, avec MIS phase/lumiere.
+                        radiance += throughput * DirectLightVolume(r, p + r.direction * EPS, mediumG, sigmaT);
+
+                        vec3 wo = SampleHG(-r.direction, mediumG, rand(), rand());
+                        float phasePdf = PhaseHG(dot(-r.direction, wo), mediumG);
+                        if (phasePdf <= 0.0)
+                            break;
+
+                        r.origin = p + wo * EPS;
+                        r.direction = wo;
+                        bsdfPdf = phasePdf;
+                        // Les collisions volumiques multiples peuvent saturer
+                        // maxDepth trop vite; on reserve maxDepth aux interfaces
+                        // surface/refract et laisse la RR controler la longueur
+                        // des marches dans le milieu.
+                        state.depth--;
+                        continue;
+                    }
+                }
+            }
+
+            // Pas de collision volumetrique sur ce segment : transmittance
+            // jusqu'a la surface.
+            throughput *= exp(-sigmaT * state.hitDist);
+        }
 #endif
 
         pt_PrepareMaterial(state, r);
@@ -310,14 +489,26 @@ vec3 PathTrace(Ray r)
             if (dot(r.direction, state.normal) < 0.0)
             {
                 inMedium = pt_mTransDepth > 0.0;
-                mediumSigmaT = inMedium
-                    ? ((-log(clamp(pt_mTransColor, vec3(1e-3), vec3(1.0))) + max(pt_mTransScatter, vec3(0.0))) / pt_mTransDepth)
-                    : vec3(0.0);
+                if (inMedium)
+                {
+                    mediumSigmaA = PT_VOLUME_ABSORB_SCALE
+                        * (-log(clamp(pt_mTransColor, vec3(1e-3), vec3(1.0))) / pt_mTransDepth);
+                    mediumSigmaS = PT_VOLUME_SCATTER_SCALE * max(pt_mTransScatter, vec3(0.0));
+                    mediumG = clamp(pt_mTransScatterAniso, -0.99, 0.99);
+                }
+                else
+                {
+                    mediumSigmaA = vec3(0.0);
+                    mediumSigmaS = vec3(0.0);
+                    mediumG = 0.0;
+                }
             }
             else
             {
                 inMedium = false;
-                mediumSigmaT = vec3(0.0);
+                mediumSigmaA = vec3(0.0);
+                mediumSigmaS = vec3(0.0);
+                mediumG = 0.0;
             }
         }
 #endif
