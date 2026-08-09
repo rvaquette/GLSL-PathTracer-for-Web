@@ -13,7 +13,7 @@
 //    - la librairie MaterialX (structs BSDF/EDF/..., fonctions mx_*, NG_*),
 //    - le mapping u_env* -> envMap*, u_refractionTwoSided,
 //    - les globales geometriques g_pt* et les globales materiau pt_m*,
-//    - pt_LoadParams(int matID) + pt_InitMaterialSummary(),
+//    - mtlxLoadParams(int matID) + pt_InitMaterialSummary(),
 //    - pt_MtlxLayerStackResponse(closureType, L, V, N, P, T, occlusion),
 //    - EvalMtlxClosure(matID, State, V, N, L, out pdf, out flags),
 //    - SampleMtlxClosure(matID, State, V, N, out L, out pdf, out flags).
@@ -78,7 +78,7 @@ Light GetLight(int i)
 //  POINT D'INJECTION DU MATERIAU GENERE
 //
 //  Le renderer injecte ici (jusqu'au marqueur // __MTLX_STACK_END__) :
-//    lib mx_* + structs + globales g_pt*/materiau + pt_LoadParams +
+//    lib mx_* + structs + globales g_pt*/materiau + mtlxLoadParams +
 //    pt_InitMaterialSummary + pt_MtlxLayerStackResponse + mtlxEvalSurface +
 //    EvalMtlxClosure + SampleMtlxClosure.
 // =============================================================================
@@ -87,7 +87,7 @@ Light GetLight(int i)
 // =============================================================================
 //  PREPARATION DU MATERIAU (MaterialX uniquement, pas de repli Disney)
 //
-//  Charge les parametres du materiau pour le hit courant (pt_LoadParams), calcule
+//  Charge les parametres du materiau pour le hit courant (mtlxLoadParams), calcule
 //  le resume de lobe (pt_InitMaterialSummary) et deduit l'eta depuis pt_mIor.
 //  Appele par PathTrace avant d'acceder a pt_mEmission ou d'appeler les closures.
 // =============================================================================
@@ -98,7 +98,7 @@ void pt_PrepareMaterial(inout State state, in Ray r)
     // the glTF loader for direct GL texture sampling, so hand MaterialX the
     // un-flipped V. Image nodes re-flip via fileTextureVerticalFlip (generator).
     g_ptTexcoord = vec2(state.texCoord.x, 1.0 - state.texCoord.y);
-    pt_LoadParams(state.matID);
+    mtlxLoadParams(state.matID);
     pt_InitMaterialSummary();
     float safeIor = clamp(pt_mIor, 1.0, 3.0);
     state.eta = dot(r.direction, state.normal) < 0.0 ? (1.0 / safeIor) : safeIor;
