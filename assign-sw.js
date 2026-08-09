@@ -23,7 +23,13 @@ self.addEventListener('fetch', (event) => {
     const p = url.pathname;
 
     if (p.endsWith('/pathtracer.json')) {
-        event.respondWith(json([pendingConfig.scene]));
+        // Only filter to a single scene for the render iframe, not for assign.html itself.
+        event.respondWith(
+            self.clients.get(event.clientId).then(client => {
+                if (!client || !client.url.includes('index.html')) return fetch(event.request);
+                return json([pendingConfig.scene]);
+            })
+        );
         return;
     }
     if (p.endsWith('/shadertoy.json') || p.endsWith('/shadertoy-glsl-pathtracer.json')) {
