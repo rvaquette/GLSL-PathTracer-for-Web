@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Assign Materials · PathTracer</title>
+<style>
+:root {
+  --bg0: #0f1720; --bg1: #182030; --bg2: #1e2d42;
+  --line: #2e4a66; --text: #d8e8f8; --muted: #7a9bbf;
+  --accent: #4fc3ff; --accent2: #5fffca;
+  --danger: #ff6b6b; --ok: #5fffca;
+  --r: 10px; --gap: 14px;
+  --panel-w: 340px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg0);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── HEADER ─────────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  z-index: 10;
+}
+header h1 { font-size: 15px; font-weight: 600; letter-spacing: .02em; flex: 1; }
+header h1 span { color: var(--accent); }
+#sw-badge {
+  font-size: 10px; padding: 2px 7px; border-radius: 99px;
+  background: #1d3d2a; color: #3dff9a; display: none;
+}
+#sw-badge.on { display: inline-block; }
+
+.panel-toggle {
+  padding: 5px 9px; border-radius: 7px; font-size: 15px;
+  background: var(--bg2); border: 1px solid var(--line);
+  color: var(--text); cursor: pointer; transition: all .15s;
+  line-height: 1; user-select: none;
+}
+.panel-toggle:hover { border-color: var(--accent); }
+.panel-toggle.off { opacity: .4; border-style: dashed; }
+
+/* ── LAYOUT ──────────────────────────────────────────────── */
+.app { display: flex; flex: 1; overflow: hidden; }
+
+/* Config panel */
+#config-panel {
+  width: var(--panel-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  background: var(--bg1);
+  transition: width .25s ease, opacity .2s ease;
+}
+#config-panel.collapsed {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  border-right: none;
+}
+#config-scroll { flex: 1; overflow-y: auto; padding: var(--gap); display: flex; flex-direction: column; gap: var(--gap); }
+
+/* Render panel */
+#render-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #060d14;
+  position: relative;
+  transition: flex-basis .25s ease, opacity .2s ease;
+}
+#render-panel.collapsed {
+  flex: 0 0 0;
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+#render-frame {
+  border: none;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+#render-placeholder {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px; color: var(--muted);
+  pointer-events: none;
+}
+#render-placeholder svg { opacity: .25; }
+#render-placeholder p { font-size: 13px; text-align: center; }
+
+/* ── SECTIONS ────────────────────────────────────────────── */
+.section-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 8px;
+}
+.card {
+  background: var(--bg2); border: 1px solid var(--line);
+  border-radius: var(--r); overflow: hidden;
+}
+
+/* ── SCENE PICKER ────────────────────────────────────────── */
+.field { padding: 10px 12px; }
+.field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+select, input[type="search"], input[type="text"] {
+  width: 100%; padding: 9px 10px;
+  background: var(--bg0); border: 1px solid var(--line);
+  border-radius: 6px; color: var(--text); font-size: 13px;
+  appearance: none; -webkit-appearance: none;
+  outline: none; transition: border-color .15s;
+}
+select:focus, input:focus { border-color: var(--accent); }
+select { cursor: pointer; }
+option { background: var(--bg0); }
+
+/* ── PARAMS PANEL ───────────────────────────────────────── */
+.params-grid { display: flex; flex-direction: column; gap: 0; }
+.param-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-top: 1px solid var(--line);
+}
+.param-row:first-child { border-top: none; }
+.param-row label { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 70px; }
+.size-picker, .mode-toggle { display: flex; gap: 5px; flex-wrap: wrap; }
+.size-chip, .mode-btn {
+  padding: 5px 10px; border-radius: 6px; font-size: 12px;
+  background: var(--bg0); border: 1px solid var(--line);
+  color: var(--muted); cursor: pointer; transition: all .12s; user-select: none;
+}
+.size-chip:hover, .mode-btn:hover { border-color: var(--accent); color: var(--accent); }
+.size-chip.active, .mode-btn.active {
+  background: #1a3d60; border-color: var(--accent); color: var(--accent); font-weight: 600;
+}
+
+/* ── MESH LIST ───────────────────────────────────────────── */
+#mesh-list { display: flex; flex-direction: column; }
+.mesh-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; cursor: pointer;
+  border-top: 1px solid var(--line); transition: background .1s;
+  user-select: none; min-height: 48px;
+}
+.mesh-row:first-child { border-top: none; }
+.mesh-row:hover, .mesh-row:active { background: rgba(79,195,255,.07); }
+.mesh-row.assigned .mesh-mat { color: var(--accent2); }
+.mesh-icon { font-size: 18px; flex-shrink: 0; }
+.mesh-name { flex: 1; font-size: 13px; font-weight: 500; }
+.mesh-mat { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+.assign-btn {
+  padding: 4px 10px; border-radius: 20px;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  font-size: 11px; cursor: pointer; transition: all .15s; flex-shrink: 0;
+}
+.mesh-row:hover .assign-btn { border-color: var(--accent); color: var(--accent); }
+.mesh-row.assigned .assign-btn { border-color: var(--accent2); color: var(--accent2); }
+
+/* ── RENDER BUTTON ───────────────────────────────────────── */
+#render-footer { padding: var(--gap); border-top: 1px solid var(--line); flex-shrink: 0; }
+#render-btn {
+  width: 100%; padding: 13px; border-radius: var(--r);
+  background: linear-gradient(135deg, #1a5fa0, #0d3a61);
+  border: 1px solid #2a7bcc; color: #fff; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all .15s; letter-spacing: .02em;
+}
+#render-btn:hover { background: linear-gradient(135deg, #1e70bb, #103f6c); }
+#render-btn:active { opacity: .85; }
+#render-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── CLI COMMAND (collapsible) ───────────────────────────── */
+details summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center;
+  gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); padding: 2px 0;
+  user-select: none;
+}
+details summary::before { content: "▶"; font-size: 9px; transition: transform .15s; }
+details[open] summary::before { transform: rotate(90deg); }
+#cmd-pre {
+  margin-top: 10px; padding: 10px; background: #090f18;
+  border-radius: 6px; border: 1px solid var(--line);
+  font-family: "Consolas", monospace; font-size: 11px;
+  line-height: 1.6; color: #9ecbf5; overflow-x: auto;
+  white-space: pre; user-select: all;
+}
+#copy-btn {
+  margin-top: 8px; padding: 6px 14px; border-radius: 6px;
+  background: var(--bg0); border: 1px solid var(--line);
+  color: var(--muted); font-size: 12px; cursor: pointer; transition: all .15s;
+}
+#copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+#copy-btn.copied { border-color: var(--ok); color: var(--ok); }
+
+/* ── MATERIAL PICKER (overlay) ───────────────────────────── */
+#mat-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.55); z-index: 100;
+  display: none; align-items: flex-end;
+  justify-content: flex-end;
+}
+#mat-overlay.open { display: flex; }
+#mat-panel {
+  width: min(420px, 100%); height: min(75vh, 100%);
+  background: var(--bg1); border: 1px solid var(--line);
+  border-radius: var(--r) var(--r) 0 0;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 -8px 32px rgba(0,0,0,.5);
+}
+@media (min-width: 700px) {
+  #mat-panel { border-radius: var(--r); height: 75vh; margin: auto auto 0 auto; }
+  #mat-overlay { align-items: center; justify-content: flex-end; padding-right: calc(var(--panel-w) + 16px); }
+}
+.mat-panel-header {
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.mat-panel-header h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.mat-panel-header h3 span { color: var(--accent); }
+.mat-search-row { display: flex; gap: 8px; align-items: center; }
+#mat-search { flex: 1; }
+#mat-close {
+  padding: 8px 12px; border-radius: 6px;
+  background: var(--bg0); border: 1px solid var(--line);
+  color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1;
+  transition: all .15s; flex-shrink: 0;
+}
+#mat-close:hover { border-color: var(--danger); color: var(--danger); }
+#mat-upload-row { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+#mat-upload-btn {
+  padding: 7px 12px; border-radius: 6px; font-size: 11px;
+  background: var(--bg0); border: 1px solid var(--line);
+  color: var(--muted); cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+#mat-upload-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+#mat-upload-label { font-size: 11px; color: var(--muted); truncate; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+.mat-filters { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.filter-chip {
+  padding: 4px 10px; border-radius: 99px; font-size: 11px;
+  background: var(--bg0); border: 1px solid var(--line);
+  color: var(--muted); cursor: pointer; transition: all .12s; user-select: none;
+}
+.filter-chip:hover { border-color: var(--accent); color: var(--accent); }
+.filter-chip.active { background: #1a3d60; border-color: var(--accent); color: var(--accent); }
+
+#mat-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.mat-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px; cursor: pointer;
+  transition: background .1s; min-height: 48px;
+}
+.mat-item:hover { background: rgba(79,195,255,.08); }
+.mat-item.active { background: rgba(79,195,255,.15); }
+.mat-name { flex: 1; font-size: 13px; font-weight: 500; }
+.mat-path { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.mat-cat-badge {
+  font-size: 9px; padding: 2px 6px; border-radius: 4px;
+  background: rgba(79,195,255,.1); color: var(--accent); flex-shrink: 0;
+}
+.no-results { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* ── MOBILE LAYOUT ───────────────────────────────────────── */
+@media (max-width: 699px) {
+  .app { flex-direction: column; }
+  #config-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--line); max-height: 55vh; overflow: hidden; flex-shrink: 0; }
+  #config-panel.collapsed { max-height: 0; width: 100%; opacity: 0; border-bottom: none; transition: max-height .25s ease, opacity .2s ease; }
+  #config-scroll { overflow-y: auto; }
+  #render-panel { flex: 1; min-height: 0; }
+  #render-panel.collapsed { flex: 0; min-height: 0; height: 0; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>PathTracer</span> · Material Assign</h1>
+  <span id="sw-badge">SW actif</span>
+  <div style="display:flex;gap:6px;margin-left:8px">
+    <button class="panel-toggle" id="toggle-config" title="Config" aria-label="Panneau config">📋</button>
+    <button class="panel-toggle" id="toggle-render" title="Rendu" aria-label="Panneau rendu">🖼</button>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- ── CONFIG PANEL ── -->
+  <div id="config-panel">
+    <div id="config-scroll">
+
+      <!-- Scene picker -->
+      <div>
+        <div class="section-title">Scène</div>
+        <div class="card">
+          <div class="field">
+            <label for="scene-select">Scène PathTracer</label>
+            <select id="scene-select"><option value="">— chargement… —</option></select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mesh list -->
+      <div id="meshes-section" style="display:none">
+        <div class="section-title">Objets &amp; matériaux</div>
+        <div class="card" id="mesh-list"></div>
+      </div>
+
+      <!-- Render parameters -->
+      <div id="params-section">
+        <div class="section-title">Paramètres de rendu</div>
+        <div class="card">
+          <div class="params-grid">
+            <div class="param-row">
+              <label for="p-size">Taille (px)</label>
+              <div class="size-picker" id="size-picker">
+                <button class="size-chip active" data-val="256">256</button>
+                <button class="size-chip" data-val="512">512</button>
+                <button class="size-chip" data-val="1024">1024</button>
+                <button class="size-chip" data-val="1920">1920</button>
+              </div>
+            </div>
+            <div class="param-row">
+              <label>Mode</label>
+              <div class="mode-toggle">
+                <button class="mode-btn" data-gen="essl" id="mode-essl">ESSL</button>
+                <button class="mode-btn active" data-gen="pathtracer" id="mode-pt">PathTracer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLI command (collapsible) -->
+      <div id="cmd-section" style="display:none">
+        <details>
+          <summary>Commande CLI</summary>
+          <pre id="cmd-pre"></pre>
+          <button id="copy-btn">Copier</button>
+        </details>
+      </div>
+
+    </div><!-- /scroll -->
+
+    <!-- Render button (sticky footer) -->
+    <div id="render-footer">
+      <button id="render-btn" disabled>▶ Rendre dans le navigateur</button>
+    </div>
+  </div><!-- /config-panel -->
+
+  <!-- ── RENDER PANEL ── -->
+  <div id="render-panel">
+    <div id="render-placeholder">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+        <rect x="8" y="8" width="48" height="48" rx="6" stroke="#4fc3ff" stroke-width="2"/>
+        <circle cx="32" cy="32" r="12" stroke="#4fc3ff" stroke-width="2"/>
+        <line x1="32" y1="8" x2="32" y2="20" stroke="#4fc3ff" stroke-width="2"/>
+        <line x1="32" y1="44" x2="32" y2="56" stroke="#4fc3ff" stroke-width="2"/>
+        <line x1="8" y1="32" x2="20" y2="32" stroke="#4fc3ff" stroke-width="2"/>
+        <line x1="44" y1="32" x2="56" y2="32" stroke="#4fc3ff" stroke-width="2"/>
+      </svg>
+      <p>Sélectionne une scène,<br>assigne des matériaux,<br>puis clique sur <b>Rendre</b>.</p>
+    </div>
+    <iframe id="render-frame" src="about:blank" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+  </div>
+
+</div><!-- /app -->
+
+<!-- ── MATERIAL PICKER OVERLAY ── -->
+<div id="mat-overlay">
+  <div id="mat-panel">
+    <div class="mat-panel-header">
+      <h3>Matériau pour <span id="mat-target-label">—</span></h3>
+      <div class="mat-search-row">
+        <input type="search" id="mat-search" placeholder="Rechercher…" autocomplete="off" spellcheck="false">
+        <button id="mat-close">×</button>
+      </div>
+      <div id="mat-upload-row">
+        <button id="mat-upload-btn" onclick="document.getElementById('mat-file-input').click()">📂 Upload .mtlx</button>
+        <span id="mat-upload-label">Aucun fichier</span>
+        <input type="file" id="mat-file-input" accept=".mtlx" style="display:none">
+      </div>
+    </div>
+    <div class="mat-filters" id="mat-filters"></div>
+    <div id="mat-list"><p class="no-results">Chargement…</p></div>
+  </div>
+</div>
+
+<script>
+// ── PANEL TOGGLES ────────────────────────────────────────────────────────────
+const toggleConfig = document.getElementById('toggle-config');
+const toggleRender = document.getElementById('toggle-render');
+const configPanel  = document.getElementById('config-panel');
+const renderPanel  = document.getElementById('render-panel');
+
+toggleConfig.addEventListener('click', () => {
+  const collapsed = configPanel.classList.toggle('collapsed');
+  toggleConfig.classList.toggle('off', collapsed);
+  toggleConfig.title = collapsed ? 'Ouvrir config' : 'Fermer config';
+});
+
+toggleRender.addEventListener('click', () => {
+  const collapsed = renderPanel.classList.toggle('collapsed');
+  toggleRender.classList.toggle('off', collapsed);
+  toggleRender.title = collapsed ? 'Ouvrir rendu' : 'Fermer rendu';
+});
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const assignments = new Map();  // meshName → relPath (relative to scenes/materialx/materials/)
+let catalog = [];               // all entries from materialx-materials.json
+let meshes = [];                // mesh names from current scene
+let activeMesh = null;          // mesh being assigned
+let activeFilter = 'surfaces';  // category filter
+let swReady = false;
+let uploadedMtlx = null;        // { name, relPath, text } for locally uploaded .mtlx
+let renderSize = 256;           // square resolution
+let renderGenerator = 'pathtracer'; // 'pathtracer' | 'essl'
+
+// ── ELEMENTS ──────────────────────────────────────────────────────────────────
+const sceneSelect    = document.getElementById('scene-select');
+const meshesSection  = document.getElementById('meshes-section');
+const meshList       = document.getElementById('mesh-list');
+const renderBtn      = document.getElementById('render-btn');
+const cmdSection     = document.getElementById('cmd-section');
+const cmdPre         = document.getElementById('cmd-pre');
+const copyBtn        = document.getElementById('copy-btn');
+const matOverlay     = document.getElementById('mat-overlay');
+const matPanel       = document.getElementById('mat-panel');
+const matSearch      = document.getElementById('mat-search');
+const matTargetLabel = document.getElementById('mat-target-label');
+const matList        = document.getElementById('mat-list');
+const matFilters     = document.getElementById('mat-filters');
+const matClose       = document.getElementById('mat-close');
+const matFileInput   = document.getElementById('mat-file-input');
+const matUploadLabel = document.getElementById('mat-upload-label');
+const renderFrame    = document.getElementById('render-frame');
+const renderPlaceholder = document.getElementById('render-placeholder');
+const swBadge        = document.getElementById('sw-badge');
+
+// ── SERVICE WORKER ────────────────────────────────────────────────────────────
+async function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/assign-sw.js', { scope: '/' });
+    await navigator.serviceWorker.ready;
+    swReady = true;
+    swBadge.classList.add('on');
+    console.log('[assign] SW enregistré, scope:', reg.scope);
+  } catch (e) {
+    console.warn('[assign] SW non disponible:', e);
+  }
+}
+
+function sendConfig(config) {
+  const sw = navigator.serviceWorker.controller;
+  if (sw) sw.postMessage({ type: 'SET_CONFIG', config });
+}
+
+// ── SCENE LOADING ─────────────────────────────────────────────────────────────
+async function loadSceneList() {
+  const list = await fetch('/pathtracer.json').then(r => r.json());
+  const ptScenes = list.filter(n => typeof n === 'string' && n.endsWith('.scene'));
+  sceneSelect.innerHTML = '<option value="">— choisir une scène —</option>' +
+    ptScenes.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+async function onSceneChange() {
+  const scene = sceneSelect.value;
+  if (!scene) { meshesSection.style.display = 'none'; cmdSection.style.display = 'none'; return; }
+  assignments.clear();
+  const text = await fetch(`/scenes/pathtracer/${scene}`).then(r => r.text()).catch(() => '');
+  meshes = parseMeshNames(text);
+  renderMeshList();
+  meshesSection.style.display = meshes.length ? '' : 'none';
+  updateCommand();
+  cmdSection.style.display = '';
+  updateRenderBtn();
+}
+
+function parseMeshNames(text) {
+  const names = [];
+  const re = /\bmesh\s*\{([^}]*)\}/gs;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const nm = /^\s*name\s+(\S+)/m.exec(m[1]);
+    if (nm) names.push(nm[1]);
+  }
+  return names;
+}
+
+// ── MESH LIST ─────────────────────────────────────────────────────────────────
+function renderMeshList() {
+  meshList.innerHTML = meshes.map(name => {
+    const rel = assignments.get(name);
+    const matLabel = rel ? rel.split('/').pop().replace('.mtlx', '') : '— aucun —';
+    return `
+      <div class="mesh-row${rel ? ' assigned' : ''}" data-mesh="${name}">
+        <span class="mesh-icon">${rel ? '🎨' : '📦'}</span>
+        <span class="mesh-name">${name}</span>
+        <span class="mesh-mat">${matLabel}</span>
+        <button class="assign-btn">${rel ? 'Changer' : 'Assigner'}</button>
+      </div>`;
+  }).join('');
+  meshList.querySelectorAll('.mesh-row').forEach(row => {
+    row.addEventListener('click', () => openPicker(row.dataset.mesh));
+  });
+}
+
+function updateRenderBtn() {
+  renderBtn.disabled = !sceneSelect.value;
+}
+
+// ── COMMAND BUILDER ───────────────────────────────────────────────────────────
+function updateCommand() {
+  const scene = sceneSelect.value;
+  if (!scene) { cmdSection.style.display = 'none'; return; }
+  const assigns = [...assignments.entries()]
+    .map(([k, v]) => `  --mtlx-assign "${k}=${v}"`)
+    .join(' \\\n');
+  const res = `${renderSize}x${renderSize}`;
+  cmdPre.textContent = [
+    `node scripts/render-scene-headless.mjs ${scene} \\`,
+    `  --generator ${renderGenerator} \\`,
+    assigns ? assigns + ' \\' : null,
+    `  --resolution ${res} \\`,
+    `  --out reports/${scene.replace('.scene','')}_assigned.png`,
+  ].filter(Boolean).join('\n');
+  cmdSection.style.display = '';
+}
+
+copyBtn.addEventListener('click', () => {
+  navigator.clipboard.writeText(cmdPre.textContent).then(() => {
+    copyBtn.textContent = '✓ Copié !';
+    copyBtn.classList.add('copied');
+    setTimeout(() => { copyBtn.textContent = 'Copier'; copyBtn.classList.remove('copied'); }, 1800);
+  });
+});
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+renderBtn.addEventListener('click', async () => {
+  const scene = sceneSelect.value;
+  if (!scene) return;
+  const config = {
+    scene,
+    assignments: [...assignments.entries()].map(([instanceName, relPath]) => ({ instanceName, relPath })),
+    resolution: renderSize,
+    generator: renderGenerator,
+  };
+  if (swReady) {
+    sendConfig(config);
+    await new Promise(r => setTimeout(r, 80)); // let SW digest the message
+  }
+  // Pass resolution and generator as URL params so index.html can read them via window.__pt*.
+  const params = new URLSearchParams({ resolution: `${renderSize}x${renderSize}`, generator: renderGenerator });
+  renderPlaceholder.style.display = 'none';
+  renderFrame.src = `/index.html?${params}`;
+});
+
+// ── MATERIAL CATALOG ──────────────────────────────────────────────────────────
+const CATEGORIES = ['surfaces', 'Examples', 'nodes', 'showcase', 'TestSuite'];
+
+async function loadCatalog() {
+  catalog = await fetch('/materialx-materials.json').then(r => r.json()).catch(() => []);
+  buildFilters();
+  renderMaterials('');
+}
+
+function buildFilters() {
+  matFilters.innerHTML = ['Tous', ...CATEGORIES].map(cat => `
+    <span class="filter-chip${cat === activeFilter || (cat === 'surfaces' && activeFilter === 'surfaces') ? ' active' : ''}"
+          data-cat="${cat === 'Tous' ? '' : cat}">${cat}</span>
+  `).join('');
+  matFilters.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      activeFilter = chip.dataset.cat;
+      matFilters.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      renderMaterials(matSearch.value.trim().toLowerCase());
+    });
+  });
+}
+
+function renderMaterials(query) {
+  let items = catalog;
+  if (activeFilter) items = items.filter(p => p.startsWith(activeFilter + '/') || p.startsWith(activeFilter + '\\'));
+  if (query) items = items.filter(p => p.toLowerCase().includes(query));
+
+  // Add uploaded .mtlx at top if present and matches filter/query
+  const extras = [];
+  if (uploadedMtlx && (!query || uploadedMtlx.relPath.toLowerCase().includes(query))) {
+    extras.push({ rel: uploadedMtlx.relPath, name: uploadedMtlx.name, cat: 'upload', isUpload: true });
+  }
+  const formatted = extras.concat(items.slice(0, 300).map(rel => ({
+    rel, name: rel.split('/').pop().replace('.mtlx',''), cat: rel.split('/')[0],
+  })));
+
+  if (!formatted.length) {
+    matList.innerHTML = '<p class="no-results">Aucun résultat</p>';
+    return;
+  }
+  matList.innerHTML = formatted.map(({ rel, name, cat, isUpload }) => `
+    <div class="mat-item${assignments.get(activeMesh) === rel ? ' active' : ''}" data-rel="${rel}">
+      <div style="flex:1;min-width:0">
+        <div class="mat-name">${name}</div>
+        <div class="mat-path">${rel}</div>
+      </div>
+      <span class="mat-cat-badge" style="${isUpload ? 'background:rgba(95,255,202,.1);color:#5fffca' : ''}">${cat}</span>
+    </div>`).join('');
+  matList.querySelectorAll('.mat-item').forEach(item => {
+    item.addEventListener('click', () => assignMaterial(item.dataset.rel));
+  });
+}
+
+matSearch.addEventListener('input', () => renderMaterials(matSearch.value.trim().toLowerCase()));
+
+// ── LOCAL .MTLX UPLOAD ────────────────────────────────────────────────────────
+matFileInput.addEventListener('change', async () => {
+  const file = matFileInput.files[0];
+  if (!file) return;
+  const name = file.name.replace('.mtlx', '');
+  const relPath = `__upload__/${file.name}`;
+  uploadedMtlx = { name, relPath };
+  matUploadLabel.textContent = file.name;
+  matUploadLabel.title = file.name;
+  renderMaterials(matSearch.value.trim().toLowerCase());
+});
+
+// ── RENDER PARAMS ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.size-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    renderSize = parseInt(btn.dataset.val, 10);
+    document.querySelectorAll('.size-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateCommand();
+  });
+});
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    renderGenerator = btn.dataset.gen;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateCommand();
+  });
+});
+
+// ── PICKER OPEN / CLOSE ───────────────────────────────────────────────────────
+function openPicker(meshName) {
+  activeMesh = meshName;
+  matTargetLabel.textContent = meshName;
+  matSearch.value = '';
+  matOverlay.classList.add('open');
+  renderMaterials('');
+  setTimeout(() => matSearch.focus(), 120);
+}
+
+matClose.addEventListener('click', closePicker);
+matOverlay.addEventListener('click', e => { if (e.target === matOverlay) closePicker(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePicker(); });
+
+function closePicker() {
+  matOverlay.classList.remove('open');
+  activeMesh = null;
+}
+
+// ── MATERIAL ASSIGNMENT ───────────────────────────────────────────────────────
+function assignMaterial(relPath) {
+  if (!activeMesh) return;
+  assignments.set(activeMesh, relPath);
+  closePicker();
+  renderMeshList();
+  updateCommand();
+  updateRenderBtn();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+sceneSelect.addEventListener('change', onSceneChange);
+renderBtn.addEventListener('click', () => {}); // registered above (duplicate guard)
+
+(async () => {
+  await registerSW();
+  await Promise.all([loadSceneList(), loadCatalog()]);
+})();
+</script>
+</body>
+</html>
