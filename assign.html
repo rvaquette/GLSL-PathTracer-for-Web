@@ -456,7 +456,7 @@ const swBadge        = document.getElementById('sw-badge');
 async function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   try {
-    const reg = await navigator.serviceWorker.register('/assign-sw.js', { scope: '/' });
+    const reg = await navigator.serviceWorker.register('assign-sw.js', { scope: './' });
     await navigator.serviceWorker.ready;
     swReady = true;
     swBadge.classList.add('on');
@@ -473,7 +473,7 @@ function sendConfig(config) {
 
 // ── SCENE LOADING ─────────────────────────────────────────────────────────────
 async function loadSceneList() {
-  const list = await fetch('/pathtracer.json').then(r => r.json());
+  const list = await fetch('pathtracer.json').then(r => r.json());
   const ptScenes = list.filter(n => typeof n === 'string' && n.endsWith('.scene'));
   sceneSelect.innerHTML = '<option value="">— choisir une scène —</option>' +
     ptScenes.map(s => `<option value="${s}">${s}</option>`).join('');
@@ -483,7 +483,7 @@ async function onSceneChange() {
   const scene = sceneSelect.value;
   if (!scene) { meshesSection.style.display = 'none'; cmdSection.style.display = 'none'; return; }
   assignments.clear();
-  const text = await fetch(`/scenes/pathtracer/${scene}`).then(r => r.text()).catch(() => '');
+  const text = await fetch(`scenes/pathtracer/${scene}`).then(r => r.text()).catch(() => '');
   meshes = parseMeshNames(text);
   renderMeshList();
   meshesSection.style.display = meshes.length ? '' : 'none';
@@ -568,14 +568,14 @@ renderBtn.addEventListener('click', async () => {
   // Pass resolution and generator as URL params so index.html can read them via window.__pt*.
   const params = new URLSearchParams({ resolution: `${renderSize}x${renderSize}`, generator: renderGenerator });
   renderPlaceholder.style.display = 'none';
-  renderFrame.src = `/index.html?${params}`;
+  renderFrame.src = `index.html?${params}`;
 });
 
 // ── MATERIAL CATALOG ──────────────────────────────────────────────────────────
 const CATEGORIES = ['surfaces', 'Examples', 'nodes', 'showcase', 'TestSuite'];
 
 async function loadCatalog() {
-  catalog = await fetch('/materialx-materials.json').then(r => r.json()).catch(() => []);
+  catalog = await fetch('materialx-materials.json').then(r => r.json()).catch(() => []);
   buildFilters();
   renderMaterials('');
 }
