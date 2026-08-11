@@ -22,7 +22,7 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
     const p = url.pathname;
 
-    if (p.endsWith('/pathtracer.json')) {
+    if (p.endsWith('pathtracer.json')) {
         // Only filter to a single scene for the render iframe, not for assign.html itself.
         event.respondWith(
             self.clients.get(event.clientId).then(client => {
@@ -32,12 +32,12 @@ self.addEventListener('fetch', (event) => {
         );
         return;
     }
-    if (p.endsWith('/shadertoy.json') || p.endsWith('/shadertoy-glsl-pathtracer.json')) {
+    if (p.endsWith('shadertoy.json') || p.endsWith('shadertoy-glsl-pathtracer.json')) {
         event.respondWith(json([]));
         return;
     }
     // Patch the .scene file with material assignments.
-    if (p.includes('/scenes/pathtracer/') && p.endsWith(pendingConfig.scene)) {
+    if (p.includes('scenes/pathtracer/') && p.endsWith(pendingConfig.scene)) {
         event.respondWith(
             fetch(event.request).then(r => {
                 if (!r.ok) return r;

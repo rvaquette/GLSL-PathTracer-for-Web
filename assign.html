@@ -107,6 +107,19 @@ header h1 span { color: var(--accent); }
 #render-placeholder svg { opacity: .25; }
 #render-placeholder p { font-size: 13px; text-align: center; }
 
+/* ── COMPILE ERROR BANNER ────────────────────────────────── */
+#compile-error-banner {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  background: rgba(180,30,30,.22); border-bottom: 2px solid var(--danger);
+  color: #ffaaaa; padding: 10px 14px; font-size: 12px; font-weight: 600;
+}
+#compile-error-banner details { margin-top: 6px; font-weight: 400; }
+#compile-error-banner pre {
+  margin-top: 6px; font-size: 10px; font-family: "Consolas", monospace;
+  color: #ffd0d0; white-space: pre-wrap; max-height: 180px; overflow-y: auto;
+  background: rgba(0,0,0,.3); padding: 8px; border-radius: 4px;
+}
+
 /* ── SECTIONS ────────────────────────────────────────────── */
 .section-title {
   font-size: 11px; font-weight: 700; letter-spacing: .08em;
@@ -253,6 +266,7 @@ details[open] summary::before { transform: rotate(90deg); }
 #mat-upload-label { font-size: 11px; color: var(--muted); truncate; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 
 .mat-filters { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+#mat-filters-2 { padding-left: 22px; background: rgba(0,0,0,.14); }
 .filter-chip {
   padding: 4px 10px; border-radius: 99px; font-size: 11px;
   background: var(--bg0); border: 1px solid var(--line);
@@ -277,14 +291,28 @@ details[open] summary::before { transform: rotate(90deg); }
 }
 .no-results { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
 
-/* ── MOBILE LAYOUT ───────────────────────────────────────── */
+/* ── RESPONSIVE LAYOUT ───────────────────────────────────── */
+/* Horizontal (wide) : 2 panels side by side — handled by default flex-direction: row */
+/* Vertical (narrow) : stacked one above the other */
 @media (max-width: 699px) {
   .app { flex-direction: column; }
-  #config-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--line); max-height: 55vh; overflow: hidden; flex-shrink: 0; }
-  #config-panel.collapsed { max-height: 0; width: 100%; opacity: 0; border-bottom: none; transition: max-height .25s ease, opacity .2s ease; }
+  #config-panel {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    max-height: 45vh;
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: max-height .25s ease, opacity .2s ease;
+  }
+  #config-panel.collapsed {
+    max-height: 0;
+    opacity: 0;
+    border-bottom: none;
+  }
   #config-scroll { overflow-y: auto; }
   #render-panel { flex: 1; min-height: 0; }
-  #render-panel.collapsed { flex: 0; min-height: 0; height: 0; }
+  #render-panel.collapsed { flex: 0 0 0; min-height: 0; overflow: hidden; }
 }
 </style>
 </head>
@@ -306,6 +334,8 @@ details[open] summary::before { transform: rotate(90deg); }
     <div id="config-scroll">
 
       <!-- Scene picker -->
+      <select id="scene-select" style="display: none;"></select>
+      <!--
       <div>
         <div class="section-title">Scène</div>
         <div class="card">
@@ -315,35 +345,41 @@ details[open] summary::before { transform: rotate(90deg); }
           </div>
         </div>
       </div>
+      -->
 
       <!-- Mesh list -->
       <div id="meshes-section" style="display:none">
-        <div class="section-title">Objets &amp; matériaux</div>
-        <div class="card" id="mesh-list"></div>
+        <details open>
+          <summary>Objets &amp; matériaux</summary>
+          <div class="card" id="mesh-list" style="margin-top:8px"></div>
+        </details>
       </div>
 
       <!-- Render parameters -->
       <div id="params-section">
-        <div class="section-title">Paramètres de rendu</div>
-        <div class="card">
-          <div class="params-grid">
-            <div class="param-row">
-              <label for="p-size">Taille (px)</label>
-              <div class="size-picker" id="size-picker">
-                <button class="size-chip active" data-val="256">256</button>
-                <button class="size-chip" data-val="512">512</button>
-                <button class="size-chip" data-val="1024">1024</button>
-                <button class="size-chip" data-val="1920">1920</button>
+        <details open>
+          <summary>Paramètres de rendu</summary>
+          <div class="card" style="margin-top:8px">
+            <div class="params-grid">
+              <div class="param-row">
+                <label for="p-size">Taille (px)</label>
+                <div class="size-picker" id="size-picker">
+                  <button class="size-chip active" data-val="256">256</button>
+                  <button class="size-chip" data-val="512">512</button>
+                  <button class="size-chip" data-val="1024">1024</button>
+                  <button class="size-chip" data-val="1920">1920</button>
+                </div>
+              </div>
+              <div class="param-row">
+                <label>Mode</label>
+                <div class="mode-toggle">
+                  <button class="mode-btn" data-gen="essl" id="mode-essl">ESSL</button>
+                  <button class="mode-btn active" data-gen="pathtracer" id="mode-pt">PathTracer</button>
+                </div>
               </div>
             </div>
-            <div class="param-row">
-              <label>Mode</label>
-              <div class="mode-toggle">
-                <button class="mode-btn" data-gen="essl" id="mode-essl">ESSL</button>
-                <button class="mode-btn active" data-gen="pathtracer" id="mode-pt">PathTracer</button>
-            </div>
           </div>
-        </div>
+        </details>
       </div>
 
       <!-- CLI command (collapsible) -->
@@ -359,12 +395,16 @@ details[open] summary::before { transform: rotate(90deg); }
 
     <!-- Render button (sticky footer) -->
     <div id="render-footer">
-      <button id="render-btn" disabled>▶ Rendre dans le navigateur</button>
+      <button id="render-btn" disabled>▶ Lancer</button>
     </div>
   </div><!-- /config-panel -->
 
   <!-- ── RENDER PANEL ── -->
   <div id="render-panel">
+    <div id="compile-error-banner" style="display:none">
+      ⚠ Erreur(s) de compilation GLSL
+      <details><summary>Voir le log</summary><pre id="compile-error-log"></pre></details>
+    </div>
     <div id="render-placeholder">
       <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
         <rect x="8" y="8" width="48" height="48" rx="6" stroke="#4fc3ff" stroke-width="2"/>
@@ -374,7 +414,6 @@ details[open] summary::before { transform: rotate(90deg); }
         <line x1="8" y1="32" x2="20" y2="32" stroke="#4fc3ff" stroke-width="2"/>
         <line x1="44" y1="32" x2="56" y2="32" stroke="#4fc3ff" stroke-width="2"/>
       </svg>
-      <p>Sélectionne une scène,<br>assigne des matériaux,<br>puis clique sur <b>Rendre</b>.</p>
     </div>
     <iframe id="render-frame" src="about:blank" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
   </div>
@@ -397,6 +436,7 @@ details[open] summary::before { transform: rotate(90deg); }
       </div>
     </div>
     <div class="mat-filters" id="mat-filters"></div>
+    <div class="mat-filters" id="mat-filters-2" style="display:none"></div>
     <div id="mat-list"><p class="no-results">Chargement…</p></div>
   </div>
 </div>
@@ -426,6 +466,7 @@ let catalog = [];               // all entries from materialx-materials.json
 let meshes = [];                // mesh names from current scene
 let activeMesh = null;          // mesh being assigned
 let activeFilter = 'surfaces';  // category filter
+let activeFilter2 = '';         // subfolder filter
 let swReady = false;
 let uploadedMtlx = null;        // { name, relPath, text } for locally uploaded .mtlx
 let renderSize = 256;           // square resolution
@@ -445,11 +486,14 @@ const matSearch      = document.getElementById('mat-search');
 const matTargetLabel = document.getElementById('mat-target-label');
 const matList        = document.getElementById('mat-list');
 const matFilters     = document.getElementById('mat-filters');
+const matFilters2    = document.getElementById('mat-filters-2');
 const matClose       = document.getElementById('mat-close');
 const matFileInput   = document.getElementById('mat-file-input');
 const matUploadLabel = document.getElementById('mat-upload-label');
 const renderFrame    = document.getElementById('render-frame');
 const renderPlaceholder = document.getElementById('render-placeholder');
+const compileErrorBanner = document.getElementById('compile-error-banner');
+const compileErrorLog    = document.getElementById('compile-error-log');
 const swBadge        = document.getElementById('sw-badge');
 
 // ── SERVICE WORKER ────────────────────────────────────────────────────────────
@@ -475,15 +519,15 @@ function sendConfig(config) {
 async function loadSceneList() {
   const list = await fetch('/pathtracer.json').then(r => r.json());
   const ptScenes = list.filter(n => typeof n === 'string' && n.endsWith('.scene'));
-  sceneSelect.innerHTML = '<option value="">— choisir une scène —</option>' +
-    ptScenes.map(s => `<option value="${s}">${s}</option>`).join('');
+  sceneSelect.innerHTML = ["materialx_tests_absval.scene"].map(s => `<option value="${s}">${s}</option>`).join('');
+  sceneSelect.value = "materialx_tests_absval.scene";
 }
 
 async function onSceneChange() {
   const scene = sceneSelect.value;
   if (!scene) { meshesSection.style.display = 'none'; cmdSection.style.display = 'none'; return; }
   assignments.clear();
-  const text = await fetch(`/scenes/pathtracer/${scene}`).then(r => r.text()).catch(() => '');
+  const text = await fetch(`scenes/pathtracer/${scene}`).then(r => r.text()).catch(() => '');
   meshes = parseMeshNames(text);
   renderMeshList();
   meshesSection.style.display = meshes.length ? '' : 'none';
@@ -571,12 +615,24 @@ renderBtn.addEventListener('click', async () => {
   renderFrame.src = `/index.html?${params}`;
 });
 
+// Override alert in the iframe on each load to catch GLSL compile errors.
+renderFrame.addEventListener('load', () => {
+  compileErrorBanner.style.display = 'none';
+  try {
+    renderFrame.contentWindow.alert = (msg) => {
+      compileErrorLog.textContent = msg;
+      compileErrorBanner.style.display = '';
+    };
+  } catch(e) {}
+});
+
 // ── MATERIAL CATALOG ──────────────────────────────────────────────────────────
 const CATEGORIES = ['surfaces', 'Examples', 'nodes', 'showcase', 'TestSuite'];
 
 async function loadCatalog() {
   catalog = await fetch('/materialx-materials.json').then(r => r.json()).catch(() => []);
   buildFilters();
+  buildFilters2();
   renderMaterials('');
 }
 
@@ -588,7 +644,33 @@ function buildFilters() {
   matFilters.querySelectorAll('.filter-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       activeFilter = chip.dataset.cat;
+      activeFilter2 = '';
       matFilters.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      buildFilters2();
+      renderMaterials(matSearch.value.trim().toLowerCase());
+    });
+  });
+}
+
+function buildFilters2() {
+  if (!activeFilter) { matFilters2.style.display = 'none'; return; }
+  const prefix = activeFilter + '/';
+  const subs = [...new Set(
+    catalog
+      .filter(p => p.startsWith(prefix))
+      .map(p => { const rest = p.slice(prefix.length); const s = rest.indexOf('/'); return s !== -1 ? rest.slice(0, s) : ''; })
+      .filter(Boolean)
+  )].sort();
+  if (!subs.length) { matFilters2.style.display = 'none'; return; }
+  matFilters2.style.display = '';
+  matFilters2.innerHTML = ['Tous', ...subs].map(sub =>
+    `<span class="filter-chip${!activeFilter2 && sub === 'Tous' ? ' active' : activeFilter2 === sub ? ' active' : ''}" data-sub="${sub === 'Tous' ? '' : sub}">${sub}</span>`
+  ).join('');
+  matFilters2.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      activeFilter2 = chip.dataset.sub;
+      matFilters2.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       renderMaterials(matSearch.value.trim().toLowerCase());
     });
@@ -598,6 +680,7 @@ function buildFilters() {
 function renderMaterials(query) {
   let items = catalog;
   if (activeFilter) items = items.filter(p => p.startsWith(activeFilter + '/') || p.startsWith(activeFilter + '\\'));
+  if (activeFilter && activeFilter2) items = items.filter(p => p.startsWith(activeFilter + '/' + activeFilter2 + '/'));
   if (query) items = items.filter(p => p.toLowerCase().includes(query));
 
   // Add uploaded .mtlx at top if present and matches filter/query
@@ -688,12 +771,13 @@ function assignMaterial(relPath) {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-sceneSelect.addEventListener('change', onSceneChange);
+//sceneSelect.addEventListener('change', onSceneChange);
 renderBtn.addEventListener('click', () => {}); // registered above (duplicate guard)
 
 (async () => {
   await registerSW();
   await Promise.all([loadSceneList(), loadCatalog()]);
+onSceneChange();
 })();
 </script>
 </body>
