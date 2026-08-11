@@ -500,7 +500,7 @@ const swBadge        = document.getElementById('sw-badge');
 async function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   try {
-    const reg = await navigator.serviceWorker.register('/assign-sw.js', { scope: '/' });
+    const reg = await navigator.serviceWorker.register('./assign-sw.js', { scope: '/' });
     await navigator.serviceWorker.ready;
     swReady = true;
     swBadge.classList.add('on');

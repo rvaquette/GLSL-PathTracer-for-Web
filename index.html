@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>GLSL-Pathtracer-JS</title>
+    <script>(function(){var g=new URLSearchParams(location.search).get('generator');if(g==='essl'||g==='pathtracer'||g==='auto')window.__ptForceGenerator=g;}());</script>
     <style>
     :root {
       --bg-0: #111822;
@@ -467,12 +468,17 @@
         const stageOrder = ['loading', 'processing', 'compile', 'launch'];
         const traceBuffer = [];
         const maxTraceLines = 6;
+        const launchRenderMessage = 'Lancement du rendu';
         let lastStage = '';
 
         function updateSceneStageTraceView() {
           const traceEl = document.getElementById('scene-stage-trace');
           if (!traceEl) return;
           traceEl.textContent = traceBuffer.join('\n');
+        }
+
+        function isLaunchRenderMessage(stage, message) {
+          return (stage === 'launch');
         }
 
         window.pushSceneStageTrace = function(source, message) {
@@ -490,6 +496,11 @@
           const overlay = document.getElementById('scene-stage-overlay');
           const messageEl = document.getElementById('scene-stage-message');
           if (!overlay) return;
+
+          if (isLaunchRenderMessage(stage, message)) {
+            overlay.classList.add('hidden');
+            return;
+          }
 
           if (stage && stage !== lastStage) {
             lastStage = stage;
@@ -524,11 +535,6 @@
             window.pushSceneStageTrace('stage', message);
           }
 
-          if (stage === 'launch') {
-            window.setTimeout(function() {
-              overlay.classList.add('hidden');
-            }, 500);
-          }
         }
 
         window.updateSceneStageIndicator = updateSceneStageIndicator;
