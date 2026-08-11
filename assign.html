@@ -517,7 +517,7 @@ function sendConfig(config) {
 
 // ── SCENE LOADING ─────────────────────────────────────────────────────────────
 async function loadSceneList() {
-  const list = await fetch('/pathtracer.json').then(r => r.json());
+  const list = await fetch('pathtracer.json').then(r => r.json());
   const ptScenes = list.filter(n => typeof n === 'string' && n.endsWith('.scene'));
   sceneSelect.innerHTML = ["materialx_tests_absval.scene"].map(s => `<option value="${s}">${s}</option>`).join('');
   sceneSelect.value = "materialx_tests_absval.scene";
@@ -637,7 +637,7 @@ renderFrame.addEventListener('load', () => {
 const CATEGORIES = ['surfaces', 'Examples', 'nodes', 'showcase', 'TestSuite'];
 
 async function loadCatalog() {
-  catalog = await fetch('/materialx-materials.json').then(r => r.json()).catch(() => []);
+  catalog = await fetch('materialx-materials.json').then(r => r.json()).catch(() => []);
   buildFilters();
   buildFilters2();
   renderMaterials('');
