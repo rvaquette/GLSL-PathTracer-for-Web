@@ -612,7 +612,7 @@ renderBtn.addEventListener('click', async () => {
   // Pass resolution and generator as URL params so index.html can read them via window.__pt*.
   const params = new URLSearchParams({ resolution: `${renderSize}x${renderSize}`, generator: renderGenerator });
   renderPlaceholder.style.display = 'none';
-  renderFrame.src = `/index.html?${params}`;
+  renderFrame.src = `index.html?${params}`;
 });
 
 // Override alert and catch unhandled errors/rejections in the iframe.
