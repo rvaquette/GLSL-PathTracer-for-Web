@@ -615,14 +615,21 @@ renderBtn.addEventListener('click', async () => {
   renderFrame.src = `/index.html?${params}`;
 });
 
-// Override alert in the iframe on each load to catch GLSL compile errors.
+// Override alert and catch unhandled errors/rejections in the iframe.
 renderFrame.addEventListener('load', () => {
   compileErrorBanner.style.display = 'none';
   try {
-    renderFrame.contentWindow.alert = (msg) => {
+    const iwin = renderFrame.contentWindow;
+    iwin.alert = (msg) => {
       compileErrorLog.textContent = msg;
       compileErrorBanner.style.display = '';
     };
+    const showError = (msg) => {
+      compileErrorLog.textContent = msg;
+      compileErrorBanner.style.display = '';
+    };
+    iwin.addEventListener('error', (e) => showError(e.message || String(e)));
+    iwin.addEventListener('unhandledrejection', (e) => showError(e.reason?.message || String(e.reason)));
   } catch(e) {}
 });
 

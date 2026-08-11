@@ -44,6 +44,7 @@ self.addEventListener('fetch', (event) => {
                 return r.text().then(text => {
                     let patched = applyAssignments(text, pendingConfig.assignments);
                     if (pendingConfig.resolution) patched = applyResolution(patched, pendingConfig.resolution);
+                    if (pendingConfig.generator && pendingConfig.generator !== 'auto') patched = applyGenerator(patched, pendingConfig.generator);
                     return new Response(patched, { headers: { 'Content-Type': 'text/plain' } });
                 });
             })
@@ -82,6 +83,19 @@ function applyAssignments(text, assignments) {
         const newBlock = `material ${newMatName}\n{\n\tmaterialx_document ../materialx/materials/${relPath}\n}\n\n`;
         text = meshIdx > 0 ? text.slice(0, meshIdx) + newBlock + text.slice(meshIdx) : text + '\n' + newBlock;
     }
+    // Strip materialx_document/surface from material blocks no longer referenced by any mesh.
+    const referencedMats = new Set();
+    text.replace(/\bmesh\s*\{([^}]*)\}/gs, (_, block) => {
+        const matM = /^\s*material\s+(\S+)/m.exec(block);
+        if (matM) referencedMats.add(matM[1]);
+    });
+    text = text.replace(/\bmaterial\s+(\S+)\s*\{([^}]*)\}/gs, (full, name, body) => {
+        if (referencedMats.has(name)) return full;
+        const cleaned = body
+            .replace(/^\s*materialx_document\s+.*$/mg, '')
+            .replace(/^\s*materialx_surface\s+.*$/mg, '');
+        return `material ${name}\n{${cleaned}}`;
+    });
     return text;
 }
 
@@ -98,4 +112,12 @@ function applyResolution(text, size) {
     text = setLine(text, 'tilewidth', `${tw}`);
     text = setLine(text, 'tileheight', `${th}`);
     return text;
+}
+
+// Inject or replace the top-level materialx_generator directive in the scene text.
+function applyGenerator(text, generator) {
+    if (/^\s*materialx_generator\s+\S+/m.test(text))
+        return text.replace(/^(\s*materialx_generator\s+)\S+/m, `$1${generator}`);
+    // Prepend before the first block so the top-level parser sees it.
+    return `materialx_generator ${generator}\n` + text;
 }
