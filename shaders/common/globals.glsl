@@ -165,6 +165,10 @@ struct LightSampleRec
     float pdf;
 };
 
+// Scene material ID whose MaterialX parameters are currently bound to the
+// generated closure globals; written by mtlx_load_material_params().
+int g_mtlxActiveMatID = -1;
+
 //RNG from code by Moroz Mykhailo (https://www.shadertoy.com/view/wltcRS)
 
 //internal RNG state 
