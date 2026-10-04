@@ -57,9 +57,14 @@ bool bvhIntersectFirstHitWithinDistance(
                     dot(edge1, qVector)) / determinant;
                 float bary0 = 1.0 - baryAndDistance.x - baryAndDistance.y;
                 if (bary0 >= 0.0 && baryAndDistance.x >= 0.0 && baryAndDistance.y >= 0.0 &&
-                    baryAndDistance.z > 0.0 && baryAndDistance.z < closestDistance)
+                    baryAndDistance.z > 0.0)
                 {
-                    closestDistance = baryAndDistance.z;
+                    vec3 localHit = transformedRay.origin + baryAndDistance.z * transformedRay.direction;
+                    vec3 worldHit = (instanceTransform * vec4(localHit, 1.0)).xyz;
+                    float worldDistance = dot(worldHit - rayOrigin, rayDirection) /
+                        max(dot(rayDirection, rayDirection), DENOM_TOLERANCE);
+                    if (worldDistance <= 0.0 || worldDistance >= closestDistance) continue;
+                    closestDistance = worldDistance;
                     hitTriangle = vertexIndices;
                     hitBary = vec3(bary0, baryAndDistance.x, baryAndDistance.y);
                     hitNormal = normalize(cross(edge0, edge1));
@@ -170,6 +175,7 @@ bool trace(in vec3 rayOrigin, in vec3 rayDir, in float maxDistance,
 
 float TraceShadow(in vec3 rayOrigin, in vec3 rayDir, in float maxDistance)
 {
+    int shadingMatID = g_mtlxActiveMatID;
     vec3 point;
     vec3 shadingNormal;
     vec3 geometricNormal;
@@ -184,12 +190,13 @@ float TraceShadow(in vec3 rayOrigin, in vec3 rayDir, in float maxDistance)
     {
         // Query the occluder with its own MaterialX parameters, then restore the
         // shading point's parameter set for the caller.
-        int shadingMatID = g_mtlxActiveMatID;
         mtlx_load_material_params(g_ptHitMatID);
         bool seeThrough = !mtlx_openpbr_is_opaque() && mtlx_openpbr_is_thinwalled();
         mtlx_load_material_params(shadingMatID);
+        g_ptHitMatID = shadingMatID;
         if (seeThrough) return 1.0;
     }
 #endif
+    g_ptHitMatID = shadingMatID;
     return hit ? 0.0 : 1.0;
 }

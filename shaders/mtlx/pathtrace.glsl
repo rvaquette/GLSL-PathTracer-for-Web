@@ -168,7 +168,11 @@ vec3 PathTrace()
             radiance += direct;
         }
 
+        // Move the next ray both off the surface and slightly along its outgoing
+        // direction. The directional term prevents grazing transmitted rays from
+        // re-entering the same shell and producing a thin halo at the silhouette.
         pW += geometricNormal * sign(dot(dW, geometricNormal)) * RAY_OFFSET;
+        pW += dW * RAY_OFFSET;
         throughput *= surfaceThroughput;
         float maxThroughput = maxComponent(throughput);
         if (maxThroughput > firefly_clamp) throughput *= firefly_clamp / maxThroughput;
